@@ -82,6 +82,10 @@ class Humedad(Seccion):
         ("hum", "seco"),
     )
 
+    #: ancho reservado a las dos columnas de rótulo, para que las cajas
+    #: empiecen siempre en el mismo punto
+    ANCHO_ROT = 34
+
     def __init__(self, master):
         super().__init__(master)
         self._val_dec = validar_tecla(self.winfo_toplevel(), "decimal")
@@ -107,33 +111,40 @@ class Humedad(Seccion):
 
     # ---------------- ingreso en dos filas de dos casillas ----------------
     def _build_cuerpo(self):
+        """Rejilla de 4 columnas: rótulo, caja, rótulo, caja.
+
+        Compartir la rejilla es lo que hace que todas las casillas salgan con
+        la MISMA medida y alineadas. Con un marco por casilla, la del N° (sin
+        unidad) quedaba más estrecha que la del W1 (con "g") y sus cajas no
+        compartían el mismo borde izquierdo.
+        """
         cuerpo = tk.Frame(self, bg=CARD)
         cuerpo.grid(row=1, column=0, sticky="ew")
-        for c in range(2):
-            cuerpo.columnconfigure(c, weight=1, uniform="hum")
+        # las dos columnas de rótulo se igualan, y las dos de caja también
+        cuerpo.columnconfigure(0, minsize=self.ANCHO_ROT, weight=0)
+        cuerpo.columnconfigure(2, minsize=self.ANCHO_ROT, weight=0)
+        cuerpo.columnconfigure(1, weight=1, uniform="caja")
+        cuerpo.columnconfigure(3, weight=1, uniform="caja")
         for f, grupo in enumerate(self.FILAS):
             for c, clave in enumerate(grupo):
-                self._celda(cuerpo, f, c, clave)
+                self._celda(cuerpo, f, c * 2, clave)
 
     def _celda(self, parent, fila, col, clave):
-        """Casilla con su rótulo a la izquierda, en una rejilla 2x2."""
+        """Rótulo en la columna `col` y su caja en `col`+1, ambas en `fila`."""
         simbolo, unidad, _sig = self.D[clave]
-        marco = tk.Frame(parent, bg=CARD)
-        marco.grid(row=fila, column=col, sticky="ew", padx=(0, 12),
-                   pady=2)
-        marco.columnconfigure(1, weight=1)
-        lbl = tk.Frame(marco, bg=CARD)
-        lbl.grid(row=0, column=0, sticky="w", padx=(0, 6))
+        lbl = tk.Frame(parent, bg=CARD)
+        lbl.grid(row=fila, column=col, sticky="w", padx=(0, 6), pady=2)
         tk.Label(lbl, text=simbolo, font=(FAM_UI, 10), fg=TXT,
                  bg=CARD).pack(side="left")
         if unidad:
             tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_UI, 10),
                      fg=MUT, bg=CARD).pack(side="left")
         editable = clave in ("id", "recip", "hum", "seco")
-        frm, num = self.caja(marco, getattr(self, "v_" + clave), unidad,
+        frm, num = self.caja(parent, getattr(self, "v_" + clave), unidad,
                              editable=editable,
                              tipo="decimal" if clave != "id" else "texto")
-        frm.grid(row=0, column=1, sticky="ew")
+        frm.grid(row=fila, column=col + 1, sticky="ew", pady=2,
+                 padx=(0, 14 if col == 0 else 0))
         if editable:
             self._inputs.append(num)
 
@@ -212,8 +223,7 @@ class Humedad(Seccion):
         # Los resultados (Ww, Ws, ω) no se muestran en la sección: se leen
         # en el reporte. Aquí solo queda el aviso de coherencia del ingreso.
         corto, detalle = aviso_incoherencia(self.leer(), res)
-        self.aviso_lbl.config(text=corto)
-        self._aviso_tip.set_text(detalle)
+        self.mostrar_aviso(corto, detalle)
 
     def cargar(self, ejemplo):
         h = ejemplo["hum"]
@@ -226,5 +236,4 @@ class Humedad(Seccion):
         for v in (self.v_recip, self.v_hum, self.v_seco):
             v.set("")
         self.v_id.set("")
-        self.aviso_lbl.config(text="")
-        self._aviso_tip.set_text("")
+        self.mostrar_aviso("")

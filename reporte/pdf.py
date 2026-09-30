@@ -1324,20 +1324,23 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     PAD = 7.0                   # aire interior uniforme respecto a la sección
     PAD_B = 3.0                 # aire interior inferior (zona baja, comprimida)
     H_HDR = 20.0                # encabezado clasificatorio (tabla de dos filas)
+    # Aire entre la banda del encabezado clasificatorio (GRAVA | ARENA | LIMO
+    # Y ARCILLA, y sus Divisions Gruesa/Media/Fina) y el área de trazado. Sin
+    # él, la banda toca el marco de la curva y ambas zonas se leen como una.
+    SEP_HDR = 4.0
     IZQ = 16.0                  # columna del titulo Y rotado
     DER = 16.0                  # valores del eje Y (derecha, fuera del marco)
     INF = 18.0                  # etiquetas eje X (décadas, límites y título)
-    # Separación entre el área trazada y los rótulos de abajo. Antes las
-    # etiquetas de tamaños quedaban a 6 pt del eje, tan pegadas que se leían
-    # como parte del marco; se separan 3 pt más para que respiren.
-    EIX_LBL = 9.0               # línea base de los rótulos de tamaños
-    EIX_TIT = 15.5              # línea base del título del eje X
+    # Separación entre el área trazada y los rótulos de abajo. Las etiquetas
+    # de tamaños van pegadas al eje, como estaban.
+    EIX_LBL = 6.0               # línea base de los rótulos de tamaños
+    EIX_TIT = 12.0              # línea base del título del eje X
     x, y, w, h = box
     x0, y0, w0, h0 = x + PAD, y + PAD_B, w - 2.0 * PAD, h - PAD - PAD_B
     top = y0 + h0               # borde superior del contenido (inset del borde)
     px0 = x0 + IZQ
     py0 = y0 + INF                      # borde inferior del area de trazado (0 %)
-    py1 = top - H_HDR                   # borde superior del area de trazado (100 %)
+    py1 = top - H_HDR - SEP_HDR         # borde superior del area de trazado (100 %)
     px1 = px0 + (w0 - IZQ - DER)
     pw = px1 - px0
     ph = py1 - py0
@@ -1394,9 +1397,10 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     pts = [(XLOG(dd), YP(pp)) for (dd, pp) in pts]
 
     # ---- orden de capas: banda, cuadricula, limites, curva, puntos ----
-    # 0) banda gris clara del encabezado clasificatorio (como en las tablas)
+    #    Empieza SEP_HDR por encima del marco, para que quede el aire
+    #    que la separa del area de la curva.
     c.setFillColor(C_HEAD)
-    c.rect(px0, py1, pw, H_HDR, stroke=0, fill=1)
+    c.rect(px0, py1 + SEP_HDR, pw, H_HDR, stroke=0, fill=1)
     # cuadricula horizontal cada 10 %
     c.setStrokeColor(CL_GRID)
     c.setLineWidth(0.35)

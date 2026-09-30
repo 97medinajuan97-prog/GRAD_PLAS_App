@@ -192,7 +192,9 @@ class Granulometria(Seccion):
     # ---------------- tabla: ingreso (izquierda) | resultados (derecha) ----
     def _build_cuerpo(self):
         cuerpo = tk.Frame(self, bg=CARD)
-        cuerpo.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        # sin aire extra debajo: el aviso ya aporta su espacio cuando hay
+        # algo que avisar, y si no, la sección termina en la última fila
+        cuerpo.grid(row=1, column=0, sticky="ew")
         tabla = tk.Frame(cuerpo, bg=CARD)
         tabla.pack(side="left", fill="both", expand=True)
         self._build_tabla(tabla)
@@ -335,8 +337,7 @@ class Granulometria(Seccion):
                 corto = "⚠ Grava+Arena+Finos ≠ 100 %"
                 detalle = ("La suma de %grava ({:.1f}) + %arena ({:.1f}) + "
                            "%finos ({:.1f}) debe dar 100 %.".format(ga, ar, fi))
-        self.aviso_lbl.config(text=corto)
-        self._aviso_tip.set_text(detalle)
+        self.mostrar_aviso(corto, detalle)
 
     def cargar(self, ejemplo):
         g = ejemplo["grano"]
@@ -352,5 +353,4 @@ class Granulometria(Seccion):
         for row in self.v_res:
             for v in row:
                 v.set("—")
-        self.aviso_lbl.config(text="")
-        self._aviso_tip.set_text("")
+        self.mostrar_aviso("")

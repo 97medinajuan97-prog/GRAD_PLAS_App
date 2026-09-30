@@ -11,7 +11,7 @@ from tkinter import ttk, filedialog, messagebox
 from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D, BG,
                       CARD, MUT, SUP, TXT, FAM_UI, VERSION, validar_tecla,
                       ayuda_seccion, SelectDropdown, habilitar_deshacer,
-                      ToolTip)
+                      ToolTip, FONDO_VISOR)
 from secciones.humedad import Humedad
 from secciones.limites import Limites
 from secciones.granulometria import Granulometria
@@ -23,9 +23,6 @@ from datos_ejemplo import datos_ejemplo, SIMBOLOS
 #: en ambos sitios, con el riesgo de que se desincronizaran.
 TITULO = ("Granulometría · Límites de Atterberg · Humedad natural"
           " — INV E-123 · E-125 · E-126")
-
-#: Formas de ver el reporte en el panel derecho.
-VISTAS = ("Ajustar al ancho", "Ver todo el alto")
 
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
          "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -67,7 +64,14 @@ class App(tk.Tk):
         split = tk.Frame(self, bg=BG)
         split.pack(fill="both", expand=True, padx=10, pady=(6, 10))
         self.left_sc = ScrollableFrame(split)
-        self.right_sc = ScrollableFrame(split)
+        # El visualizador lleva barra horizontal: al ampliar, la hoja es más
+        # ancha que el panel y hay que poder recorrerla de lado a lado.
+        self.right_sc = ScrollableFrame(split, horizontal=True,
+                                        bg=FONDO_VISOR)
+        # La barra de herramientas va FUERA del área que desplaza, como en un
+        # lector de PDF. Dentro, el marco se ensancha con la hoja y la barra
+        # se saldría de la ventana al ampliar.
+        self.bar_r = tk.Frame(split, bg=FONDO_VISOR)
 
         def _ajustar_split(_e=None):
             tot = split.winfo_width()
@@ -77,8 +81,14 @@ class App(tk.Tk):
             usable = tot - 6
             rw = int(round(usable * 0.618))
             lw = usable - rw
+            # La barra toma la altura que pide su contenido. Con una altura fija
+            # se quedaba más baja que el botón "Guardar PDF", que pide 39 px con
+            # su relleno; Tk lo comprimía y el texto se recortaba entero.
+            alto = max(30, self.bar_r.winfo_reqheight())
             self.left_sc.place(x=0, y=0, width=lw, height=h)
-            self.right_sc.place(x=lw + 6, y=0, width=rw, height=h)
+            self.bar_r.place(x=lw + 6, y=0, width=rw, height=alto)
+            self.right_sc.place(x=lw + 6, y=alto + 4, width=rw,
+                                height=max(40, h - alto - 4))
 
         split.bind("<Configure>", _ajustar_split)
         left = self.left_sc.inner()
@@ -109,26 +119,22 @@ class App(tk.Tk):
         ttk.Button(bot, text="Limpiar", style="Ghost.TButton",
                    command=self._limpiar).pack(side="left", padx=(0, 4))
 
-        # ---- panel derecho: reporte en vivo ----
-        bar = ttk.Frame(self.right)
-        bar.pack(fill="x", pady=(0, 4))
-        ttk.Label(bar, text="Reporte en vivo", style="TLabel",
-                  font=(FAM_UI, 11, "bold")).pack(side="left")
+        # ---- panel derecho: barra fija + área del visualizador ----
+        bar = ttk.Frame(self.bar_r, style="Visor.TFrame")
+        bar.pack(fill="both", expand=True, padx=(8, 8), pady=2)
+        ttk.Label(bar, text="Reporte en vivo", style="Visor.TLabel",
+                  font=(FAM_UI, 11, "bold")).pack(side="left", padx=(0, 6))
         ttk.Button(bar, text="Guardar PDF", style="Accent.TButton",
                    command=self._pdf).pack(side="right", padx=2)
-        # Dos formas de ver la hoja: ajustada al ancho del panel, o escalada
-        # para que quepa el alto completo y se lea de un vistazo.
-        ttk.Label(bar, text="Vista:", style="TLabel",
-                  font=(FAM_UI, 9)).pack(side="right", padx=(8, 4))
-        self.sel_vista = SelectDropdown(bar, list(VISTAS), inicial=VISTAS[0],
-                                        ancho=17)
-        self.sel_vista.pack(side="right", padx=(0, 8))
-        # se usa la variable del propio selector: una sola fuente de verdad
-        self.v_vista = self.sel_vista.var
-        self.v_vista.trace_add("write", self._cambio_vista)
-        ttk.Label(self.right, text="Edita los datos a la izquierda y este reporte se actualiza solo.",
-                  foreground="#6e7781", font=(FAM_UI, 8)).pack(anchor="w", pady=(0, 4))
-        self.report_area = ttk.Frame(self.right)
+        self._build_zoom(bar)
+        self._ajustar_zoom_inicial()
+        # espacio elástico entre el rótulo y el grupo de la derecha, para que
+        # el grupo quede siempre pegado al borde sin apretar el control
+        tk.Frame(bar, bg=FONDO_VISOR).pack(side="left", fill="x", expand=True)
+
+        # Área del visualizador: fondo oscuro y aire alrededor de la hoja, para
+        # que el papel blanco quede flotando como en un lector de PDF.
+        self.report_area = ttk.Frame(self.right, style="Visor.TFrame")
         self.report_area.pack(fill="both", expand=True)
         self._imgs = []
 
@@ -138,6 +144,133 @@ class App(tk.Tk):
         h = min(800, sh - 100)
         self.geometry("%dx%d+%d+%d" % (w, h, max(0, (sw - w) // 2), max(0, (sh - h) // 3)))
         self.right_sc.bind_resize(lambda: self._schedule_preview())
+        # la barra se coloca cuando ya se sabe la altura que pide su contenido
+        self.after(80, _ajustar_split)
+
+    # ---------------- zoom del reporte ----------------
+    #: Rango del control: el 0 es el 100 % del tamaño real de la hoja, y se
+    #: puede reducir a la mitad o ampliar al triple.
+    ZOOM_MIN = -60
+    ZOOM_MAX = 200
+    #: aire entre el borde del área de visualización y la hoja
+    PAD_HOJA = 12
+
+    def _build_zoom(self, parent):
+        """Control de ampliación, al estilo de un visor de PDF sencillo.
+
+        El 0 del control es el 100 %: la hoja se dibuja a su tamaño real,
+        converting los puntos del PDF a píxeles de pantalla según los DPI del
+        equipo. A la derecha va el porcentaje, que también se puede escribir.
+        """
+        self._zoom_pct = tk.StringVar(value="100 %")
+        ttk.Label(parent, text="Zoom", style="Visor.TLabel",
+                  font=(FAM_UI, 9)).pack(side="right", padx=(8, 4))
+        ent = ttk.Entry(parent, textvariable=self._zoom_pct, width=7,
+                        style="Res.TEntry", justify="center",
+                        font=(FAM_UI, 9))
+        ent.pack(side="right", padx=(0, 8))
+        ent.bind("<Return>", self._zoom_escrito)
+        ent.bind("<FocusOut>", self._zoom_escrito)
+        self._zoom_ent = ent
+
+        # Los botones usan el fondo de la barra para no abrir huecos claros.
+        mas = tk.Button(parent, text="+", font=(FAM_UI, 11, "bold"),
+                        bg=FONDO_VISOR, fg="#eef1f5", relief="flat", bd=0,
+                        width=2, activebackground="#6d747d", cursor="hand2",
+                        command=lambda: self._zoom_paso(+10))
+        mas.pack(side="right", padx=(0, 2))
+        ToolTip(mas, "Aumentar la ampliación.")
+
+        self._zoom = ttk.Scale(parent, from_=self.ZOOM_MIN, to=self.ZOOM_MAX,
+                               orient="horizontal", length=150,
+                               command=self._zoom_ir)
+        # sin `expand`: si el deslizador creciera se comería el espacio y
+        # sacaría de la barra el porcentaje, la etiqueta y el botón de PDF
+        self._zoom.pack(side="right", padx=4)
+
+        menos = tk.Button(parent, text="−", font=(FAM_UI, 11, "bold"),
+                          bg=FONDO_VISOR, fg="#eef1f5", relief="flat", bd=0,
+                          width=2, activebackground="#6d747d", cursor="hand2",
+                          command=lambda: self._zoom_paso(-10))
+        menos.pack(side="right")
+        ToolTip(menos, "Reducir la ampliación.")
+
+    def _factor_zoom(self):
+        """Factor de escala para el 100 % real de la hoja.
+
+        1 punto del PDF es 1/72 de pulgada. Multiplicando por los píxeles por
+        pulgada de la pantalla, el 100 % sale al tamaño físico real. Un 150 %
+        de DPI alto da 2.0, que es lo que quiere decir "150 %".
+        """
+        try:
+            ppp = float(self.winfo_fpixels("1i"))       # píxeles por pulgada
+        except (tk.TclError, ValueError):
+            ppp = 96.0
+        return (ppp / 72.0) * (1.0 + self._zoom_valor() / 100.0)
+
+    def _zoom_valor(self):
+        try:
+            return float(self._zoom.get())
+        except (tk.TclError, ValueError):
+            return 0.0
+
+    def _zoom_ir(self, valor):
+        """Lleva el control a una posición absoluta (contexto del 0 = 100 %)."""
+        if isinstance(valor, str):
+            try:
+                valor = float(valor)
+            except ValueError:
+                return
+            desde_widget = True
+        else:
+            desde_widget = False
+        valor = max(self.ZOOM_MIN, min(self.ZOOM_MAX, valor))
+        if not desde_widget:
+            try:
+                # `set` dispara el comando, que vuelve a entrar por la vía del
+                # widget: por eso aquí ya no se reescribe el control
+                self._zoom.set(valor)
+            except tk.TclError:
+                pass
+        self._zoom_pct.set("%d %%" % round(100.0 + valor))
+        self._schedule_preview(60)
+
+    def _zoom_paso(self, salto):
+        """Mueve el control un tanto respecto a donde está (botones − y +)."""
+        self._zoom_ir(self._zoom_valor() + salto)
+
+    def _zoom_escrito(self, _ev=None):
+        """Acepta un porcentaje escrito a mano: 100, 75, 150 %."""
+        txt = self._zoom_pct.get().replace("%", "").strip().replace(",", ".")
+        try:
+            pct = float(txt)
+        except ValueError:
+            self._zoom_pct.set("%d %%" % round(100.0 + self._zoom_valor()))
+            return
+        # un porcentaje escrito es absoluto: 150 % es el 150 %, no "150 más"
+        self._zoom_ir(pct - 100.0)
+
+    def _ajustar_zoom_inicial(self):
+        """Arranca con la hoja completa a la vista, sin esperar al primer render.
+
+        El panel aún no tiene tamaño medido, así que se usa un ancho de
+        referencia; cuando la ventana se dimensiona, el primer render ya sale
+        con la medida buena.
+        """
+        self.after(60, self._encajar_hoja)
+
+    def _encajar_hoja(self):
+        """Coloca el zoom en el valor que hace caber el alto de la hoja."""
+        try:
+            alto = self.right_sc.canvas_height() - 2 * self.PAD_HOJA
+            ppp = float(self.winfo_fpixels("1i"))
+        except (tk.TclError, ValueError):
+            return
+        # alto de la carta en puntos (792) y en pulgadas (11)
+        if alto > 40 and ppp > 20:
+            pct = 100.0 * (alto / (11.0 * ppp))
+            self._zoom_ir(max(self.ZOOM_MIN, min(self.ZOOM_MAX, pct - 100.0)))
+            self._zoom_pct.set("%d %%" % round(pct))
 
     def _build_muestra(self, parent):
         """Caja de la muestra: carpeta de trabajo, abrir y guardar.
@@ -851,21 +984,9 @@ class App(tk.Tk):
             self.after_cancel(self._preview_after)
         self._preview_after = self.after(ms, self._render_preview)
 
-    def _cambio_vista(self, *_):
-        """Cambia entre ajustar al ancho y ver el alto completo."""
-        self._render_preview()
-
-    def _zoom_preview(self, page):
-        """Factor de escala de la vista del reporte.
-
-        'Ajustar al ancho' escala para que la hoja entre a lo ancho del panel.
-        'Ver todo el alto' escala para que entre el ALTO completo de una vez,
-        que sale más pequeña y con la hoja entera a la vista.
-        """
-        if self.v_vista.get() == VISTAS[1]:
-            alto = self.right_sc.canvas_height() - 14   # aire arriba y abajo
-            return alto / float(page.rect.height)
-        return self.right_sc.canvas_width() / float(page.rect.width)
+    def _zoom_preview(self, _page=None):
+        """Factor de escala de la vista, tomado del control de zoom."""
+        return self._factor_zoom()
 
     def _render_preview(self):
         self._preview_after = None
@@ -880,9 +1001,9 @@ class App(tk.Tk):
             from reporte.pdf import preview_pdf
             pdf = preview_pdf(self._datos_actuales, self._res_actuales, self._ident())
             doc = fitz.open(pdf)
+            z = self._zoom_preview()
             imgs = []
             for page in doc:
-                z = self._zoom_preview(page)
                 pix = page.get_pixmap(matrix=fitz.Matrix(z, z))
                 png = pix.tobytes("png")
                 img = tk.PhotoImage(data=png)
@@ -896,9 +1017,11 @@ class App(tk.Tk):
             w.destroy()
         self._imgs = imgs
         for img in imgs:
-            lab = tk.Label(self.report_area, image=img, bg="#ffffff",
-                           highlightthickness=1, highlightbackground="#d7dade")
-            lab.pack(side="top", pady=2)
+            # aire alrededor de la hoja, para que no quede pegada al borde
+            lab = tk.Label(self.report_area, image=img, bg=FONDO_VISOR,
+                           highlightthickness=0)
+            lab.pack(side="top",
+                     padx=self.PAD_HOJA, pady=(self.PAD_HOJA, 0))
 
     def _show_preview_msg(self, text):
         for w in self.report_area.winfo_children():

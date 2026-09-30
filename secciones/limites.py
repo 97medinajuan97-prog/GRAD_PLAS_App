@@ -318,15 +318,13 @@ class Limites(Seccion):
             w = None if np_ else res["lp_w"][i]
             self.lp_w[i].set("—" if w is None else "%.2f" % w)
         if np_:
-            self.aviso_lbl.config(text="")
-            self._aviso_tip.set_text("")
+            self.mostrar_aviso("")
             return
         data = self.leer()
         corto, detalle = aviso_ll(data["ll"])
         if not corto:
             corto, detalle = aviso_lp(data["lp"])
-        self.aviso_lbl.config(text=corto)
-        self._aviso_tip.set_text(detalle)
+        self.mostrar_aviso(corto, detalle)
 
     def cargar(self, ejemplo):
         np_ = bool(ejemplo.get("ll_np", False))
@@ -362,6 +360,5 @@ class Limites(Seccion):
                 self.lp_v[i][c].set("")
         for v in self.ll_w + self.lp_w:
             v.set("—")
-        self.aviso_lbl.config(text="")
-        self._aviso_tip.set_text("")
+        self.mostrar_aviso("")
         self._aplicar_np()

@@ -23,6 +23,10 @@ SUP   = "#d7dade"
 TXT   = "#20242a"
 MUT   = "#6e7781"
 
+#: Fondo del panel donde se ve el reporte. Más oscuro que BG a propósito: la
+#: hoja es blanca y necesita un marco visible para no perderse en la ventana.
+FONDO_VISOR = "#565d66"
+
 # Fuente de la app. Antes se llamaba `FAM_UI`, nombre engañoso: Segoe UI
 # es una sans serif; el nombre correcta es FAM_UI.
 FAM_UI = "Segoe UI"
@@ -167,6 +171,11 @@ def aplicar_estilo(root):
     s.configure(".", font=("Segoe UI", 10))
     s.configure("TFrame", background=BG)
     s.configure("TLabel", background=BG, foreground=TXT)
+    # Fondo del visualizador del reporte: un gris claramente más oscuro que
+    # el de la app, para que la hoja blanca se despegue como en un lector de
+    # PDF y no se mezcle con el resto de la ventana.
+    s.configure("Visor.TFrame", background=FONDO_VISOR)
+    s.configure("Visor.TLabel", background=FONDO_VISOR, foreground="#d8dce2")
     s.configure("Card.TLabelframe", background=CARD, bordercolor=SUP,
                 relief="solid", borderwidth=1, padding=6)
     s.configure("Card.TLabelframe.Label", background=CARD, foreground=ACC,
@@ -294,23 +303,52 @@ class _ThumbScroll(tk.Canvas):
 
 
 class ScrollableFrame(ttk.Frame):
-    """Marca de contenido con scroll vertical (deslizador fino)."""
+    """Marca de contenido con scroll vertical (deslizador fino).
 
-    def __init__(self, master, **kw):
+    Con `horizontal=True` añade además barra horizontal y deja de forzar el
+    ancho del contenido, que es lo que permite ampliar un documento y
+    recorrerlo de lado a lado. Es lo que necesita el visualizador del
+    reporte: al ampliar, la hoja es más ancha que el panel.
+    """
+
+    def __init__(self, master, horizontal=False, bg=None, **kw):
         super().__init__(master, **kw)
-        self._canvas = tk.Canvas(self, bg=BG, highlightthickness=0, bd=0)
+        self._horizontal = horizontal
+        self._bg = bg or BG
+        self._canvas = tk.Canvas(self, bg=self._bg, highlightthickness=0,
+                                 bd=0)
         self._vsb = _ThumbScroll(self, self._canvas.yview)
         self._canvas.configure(yscrollcommand=self._vsb.set)
         self._canvas.pack(side="left", fill="both", expand=True)
         self._vsb.pack(side="right", fill="y")
-        self._inner = ttk.Frame(self._canvas)
-        self._win = self._canvas.create_window((0, 0), window=self._inner, anchor="nw")
+        self._hsb = None
+        if horizontal:
+            self._hsb = ttk.Scrollbar(self, orient="horizontal",
+                                      command=self._canvas.xview)
+            self._hsb.pack(side="bottom", fill="x")
+            self._canvas.configure(xscrollcommand=self._hsb.set)
+        self._inner = ttk.Frame(self._canvas, style="Visor.TFrame")
+        self._win = self._canvas.create_window((0, 0), window=self._inner,
+                                               anchor="nw")
         self._inner.bind("<Configure>",
                          lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all")))
-        self._canvas.bind("<Configure>",
-                          lambda e: self._canvas.itemconfigure(self._win, width=e.width))
+        if horizontal:
+            # con barra horizontal el contenido conserva su ancho propio
+            self._inner.bind("<Configure>",
+                             lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all")))
+            self._canvas.bind("<Configure>", self._ajustar_h)
+        else:
+            self._canvas.bind("<Configure>",
+                              lambda e: self._canvas.itemconfigure(self._win, width=e.width))
         self._canvas.bind("<Enter>", lambda e: self._canvas.bind_all("<MouseWheel>", self._onwheel))
         self._canvas.bind("<Leave>", lambda e: self._canvas.unbind_all("<MouseWheel>"))
+
+    def _ajustar_h(self, e):
+        """Al ampliar, la barra horizontal sigue al ancho del contenido."""
+        self._canvas.itemconfigure(self._win, width=e.width)
+        if self._hsb is not None:
+            self._hsb.set(0, 1)
+        self._canvas.xview_moveto(0.0)
 
     def _onwheel(self, e):
         self._canvas.yview_scroll(int(-e.delta / 120), "units")
@@ -546,6 +584,25 @@ class Seccion(ttk.LabelFrame):
     def limpiar(self):
         for v in self._vars:
             v.set("")
+
+    def mostrar_aviso(self, corto, detalle=""):
+        """Muestra el aviso de la sección, o lo saca de la rejilla si no hay
+        nada que decir.
+
+        Un `Label` con texto vacío sigue reservando su línea, y esa franja
+        quedaba como aire bajo la última fila de ingreso en las secciones con
+        aviso, al contrario que en la de información de la muestra.
+        """
+        if not hasattr(self, "aviso_lbl"):
+            return
+        self.aviso_lbl.config(text=corto or "")
+        tip = getattr(self, "_aviso_tip", None)
+        if tip is not None:
+            tip.set_text(detalle or "")
+        if corto:
+            self.aviso_lbl.grid()
+        else:
+            self.aviso_lbl.grid_remove()
 
     def cargar(self, ejemplo):
         raise NotImplementedError
