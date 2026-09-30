@@ -11,12 +11,13 @@ superior/inferior 0.5"). Presentación actual:
   - las alturas de cada sección se toman de `SECTIONS` (porcentaje del
     área útil) y la pila completa queda centrada verticalmente.
 
-Cada sección se dibuja como un recuadro identificado (título + descripción)
-y luego se rellenará con su contenido final.
+El documento se emite en una sola página: las alturas de las secciones se
+apilan y el sobrante queda entre el cuerpo y el bloque de firmas, de modo que
+las firmas y el pie permanecen anclados al borde inferior.
 """
 
-import datetime
 import os
+from collections import namedtuple
 
 _FONTS = {}
 
@@ -60,9 +61,19 @@ SECTIONS = [
 ]
 
 
+#: Fuentes del reporte. Antes `_webfonts()` devolvía solo dos de las tres que
+#: registraba: la itérica quedaba guardada en `_FONTS` pero era inalcanzable.
+Fuentes = namedtuple("Fuentes", "fn fnb fni")
+
+
 def _webfonts():
+    """Resuelve (normal, negrita, itálica) y las cachea.
+
+    Registra Segoe UI si está en la carpeta de fuentes de Windows, para poder
+    dibujar `ω` y otros símbolos; si no, cae a las Helvetica de ReportLab.
+    """
     if _FONTS:
-        return _FONTS["fn"], _FONTS["fnb"]
+        return Fuentes(_FONTS["fn"], _FONTS["fnb"], _FONTS["fni"])
     fn, fnb, fni = "Helvetica", "Helvetica-Bold", "Helvetica-Oblique"
     try:
         from reportlab.lib import pdfmetrics
@@ -93,7 +104,19 @@ def _webfonts():
     except Exception:
         fn, fnb, fni = "Helvetica", "Helvetica-Bold", "Helvetica-Oblique"
     _FONTS.update(fn=fn, fnb=fnb, fni=fni)
-    return fn, fnb
+    return Fuentes(fn, fnb, fni)
+
+
+def _temp_prefix():
+    """Prefijo de los archivos temporales, propio de cada copia instalada.
+
+    El nombre incluye la carpeta del proyecto para que dos versiones de la
+    app abiertas a la vez no se pisen el mismo archivo temporal: sin esto el
+    preview de una versión se vería en la otra.
+    """
+    carpeta = os.path.basename(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return "gradplas_%s_" % carpeta
 
 
 def san(s):
@@ -142,12 +165,10 @@ def _pilas(ML, MB, CW, CH, gap=GAP, alturas=None):
     for (nombre, desc, _, yp, _, hp), h in zip(secs, hs):
         (anclas if yp >= 80.0 else cuerpo).append((nombre, desc, hp, h))
 
-    # altura de las anclas SIEMPRE fija = porcentaje de la definición
+    # Las secciones ancladas (firmas, pie) conservan su altura fija; el
+    # reparto vertical real lo hace cada altura medida en `alturas`, así que
+    # aquí no hace falta calcular ningún total.
     anchgap = 1.0                    # separación firmas <-> pie (ajustada)
-    anclas_total = sum(hp / 100.0 * CH for _, _, hp, _ in anclas) \
-        + anchgap * (len(anclas) - 1)
-    CH_cuerpo = max(0.0, CH - anclas_total - anchgap)
-    c_total = sum(h for _, _, _, h in cuerpo) + gap * (len(cuerpo) - 1)
 
     pilas = []
     # 1) firmas y pie anclados al borde inferior (pie abajo, firmas encima)
@@ -257,9 +278,15 @@ def _dibujar_header(c, box, fn, fnb):
 
         elif tag == "codigo":
             ROW_H = h / 3.0                   # filas llenan exactamente la banda
+            # El reporte se emite en una sola página, así que el total es 1.
+            # Se interroga al canvas en vez de escribir "1 de 1" a mano: si
+            # algún día el documento crece a varias páginas, el rótulo
+            # seguirá siendo cierto en lugar de mentir.
+            # OJO: "VERSIÓN" es la versión del FORMATO de laboratorio
+            # (CÓDIGO F-LAB-001), no la versión de la aplicación.
             filas = [("CÓDIGO", "F-LAB-001"),
                      ("VERSIÓN", "1.0"),
-                     ("PÁGINA", "1 de 1")]
+                     ("PÁGINA", "%d de %d" % (c.getPageNumber(), 1))]
             c.setFont(fn, SIZE)               # misma fuente que columna central
             for j, (lb, val) in enumerate(filas):
                 ry = y + h - (j + 1) * ROW_H
@@ -389,8 +416,9 @@ def _rohs_project_info(datos, res, ident):
     """
     from reportlab.pdfgen import canvas as _canvas
     import tempfile
-    fn, fnb = _webfonts()
-    c = _canvas.Canvas(os.path.join(tempfile.gettempdir(), "_m.pdf"))
+    fn = _webfonts().fn          # solo se mide con la fuente normal
+    c = _canvas.Canvas(os.path.join(tempfile.gettempdir(),
+                                    _temp_prefix() + "medicion.pdf"))
     L1, PAD = 0.234, 6.0
     SIZE, R0, LH = 8.0, 12.5, 10.0
     maxw = 468.0 * (1.0 - L1) - 2.0 * PAD
@@ -443,7 +471,6 @@ def _dibujar_project_info(c, box, fn, fnb, datos, res, ident):
     SIZE = 8.0
     A, D = 0.728, 0.210
     PAD = 6.0
-    R0 = 12.5                      # alto fijo de filas pareadas
     LH = 10.0                      # alto de línea al envolver (8 pt)
 
     # grilla de columnas (misma para todas las filas: líneas alineadas)
@@ -570,7 +597,7 @@ def _dib_wl_wp(c, box, fn, fnb, datos, res):
     # llega al borde derecho. Las columnas de datos (LL ×3, LP ×2 y ω)
     # tienen el mismo ancho; la columna de la izquierda (etiquetas) es
     # independiente y más angosta. El alto del bloque es exactamente la
-    # suma de sus 9 filas (9 × 13.5 pt), las verticales se trazan en todas
+    # suma de sus 9 filas (9 × 12.5 pt), las verticales se trazan en todas
     # las filas (incluida la última) y no hay fondos de color. La columna
     # ω muestra los datos del ensayo de humedad natural y la fila final la
     # humedad calculada de cada ensayo.
@@ -1020,7 +1047,7 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
     PADX = 3.0                                # aire horizontal de las celdas
     f_tab = 0.70                              # la tabla ocupa el 70 % del ancho
     ROWS = _GR_ROWS                           # 13: encabezado + 11 tamices + fondo
-    rh = _GR_ROWH                             # 13.5 pt, igual que límites
+    rh = _GR_ROWH                             # 12.5 pt, igual que límites
     NC = 6                                    # columnas de la tabla
 
     x, y, w, h = box
@@ -1229,15 +1256,22 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
              ("D60", "mm", fmt2(res.get("D60"))),
              ("D30", "mm", fmt2(res.get("D30"))),
              ("D10", "mm", fmt2(res.get("D10"))))
-    # Grava + Arena + Finos siempre suman 100 %: se redondean Grava y Arena
-    # a 1 decimal y Finos se obtiene por diferencia, para que la suma de las
-    # tres celdas mostradas sea exactamente 100.0 %.
+    # Grava + Arena + Finos deben sumar 100 % en lo impreso. El motor ya
+    # entrega estos tres valores redondeados a 1 decimal de forma coherente
+    # (`g_grava_1d` / `g_arena_1d` / `g_finos_1d`, con Finos por diferencia),
+    # y son las mismas claves que lee el resumen de la interfaz: pantalla y
+    # papel no pueden diferir. El respaldo cubre datos que lleguen de otro
+    # origen sin esas claves.
     gv, ar, fi = res.get("g_grava"), res.get("g_arena"), res.get("g_finos")
-    if gv is not None and ar is not None:
-        gv_r = round(gv, 1)
-        ar_r = round(ar, 1)
-        fi_r = round(100.0 - gv_r - ar_r, 1)
-        c_grava, c_arena, c_finos = "%.1f" % gv_r, "%.1f" % ar_r, "%.1f" % fi_r
+    gv_1d, ar_1d, fi_1d = (res.get("g_grava_1d"), res.get("g_arena_1d"),
+                          res.get("g_finos_1d"))
+    if None not in (gv_1d, ar_1d, fi_1d):
+        c_grava, c_arena, c_finos = "%.1f" % gv_1d, "%.1f" % ar_1d, "%.1f" % fi_1d
+    elif gv is not None and ar is not None:
+        gv_r, ar_r = round(gv, 1), round(ar, 1)
+        c_grava = "%.1f" % gv_r
+        c_arena = "%.1f" % ar_r
+        c_finos = "%.1f" % round(100.0 - gv_r - ar_r, 1)
     else:
         c_grava, c_arena, c_finos = fmt1(gv), fmt1(ar), fmt1(fi)
     campos = (("Cu", None, fmt2(res.get("Cu"))),
@@ -1299,6 +1333,7 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     CL_LIM = rlcolors.HexColor("#014366")       # l\u00edmites principales (grs/arena/finos)
     CL_LIM_MIN = rlcolors.HexColor("#8FABC8")   # l\u00edmites menores (divisiones de la arena)
     C_HEAD = rlcolors.HexColor("#e4e7eb")     # banda del encabezado (como tablas)
+    C_MUT = rlcolors.HexColor("#6e7781")      # gris apagado (rotulos secundarios)
 
     A, D = 0.728, 0.210                  # ascensor/descensor por em (Segoe UI)
 
@@ -1310,17 +1345,27 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
         # p %% que pasa, 0 abajo, 100 arriba
         return py0 + ph * p / 100.0
 
-    # ---- datos de la curva (sieve del resultado, o muestra del diseno) ----
+    # ---- datos de la curva ----
+    # No se dibuja curva si no hay granulometría real que graficar. Lo que
+    # cuenta son los tamices con peso efectivamente ingresado, y no los
+    # puntos de la curva: los tamices vacíos aportan 0 al acumulado, así que
+    # el %pasa siempre trae 11 valores y una curva "plana al 100 %" parecería
+    # un ensayo verdadero con cero material. La fila FONDO se excluye por
+    # tener diámetro 0 (su peso es el resto, no un tamizado). Antes, con
+    # menos de 3 puntos se trazaba una curva de diseño de ejemplo; ese caso
+    # además era inalcanzable, porque nunca se daban menos de 3 puntos.
     pts = []
     sie = res.get("sieve") if isinstance(res, dict) else None
+    con_peso = 0
     if sie:
+        con_peso = sum(1 for s in sie
+                       if s.get("w") is not None and s.get("diam"))
         raw = [(s.get("diam"), s.get("pasa")) for s in sie]
         raw = [(d, p) for (d, p) in raw if d and d > 0.0 and p is not None]
         pts = list(sorted(raw, key=lambda r: -r[0]))
-    if len(pts) < 3:
-        pts = [(75, 100), (63, 100), (50, 100), (37.5, 86), (25, 72.5),
-               (19, 58.5), (9.5, 48), (4.75, 37), (2.0, 26),
-               (0.425, 15), (0.075, 4.5)]
+    sin_datos = con_peso == 0 or len(pts) < 3
+    if sin_datos:
+        pts = []
     pts = [(dd, pp) for (dd, pp) in pts if 0.075 <= dd <= 100.0]
     pts = [(XLOG(dd), YP(pp)) for (dd, pp) in pts]
 
@@ -1390,6 +1435,17 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     c.setStrokeColor(CL_NEGRO)
     c.setLineWidth(0.5)
     c.rect(px0, py0, pw, ph, stroke=1, fill=0)
+    # 7) sin datos suficientes: se rotula el area vacia. Se dibuja la
+    # cuadricula y las lineas de limite, pero ninguna curva, para que la
+    # hoja siga siendo presentable sin sugerir un resultado inexistente.
+    if sin_datos:
+        cxc, cyc = px0 + pw / 2.0, py0 + ph / 2.0
+        c.setFillColor(C_MUT)
+        c.setFont(fnb, 8.0)
+        c.drawCentredString(cxc, cyc + 2.0, "SIN DATOS DE CURVA")
+        c.setFont(fn, 6.0)
+        c.drawCentredString(cxc, cyc - 8.0,
+                            "ingrese los pesos retenidos de los tamices")
 
     # ---- eje X: marcas y etiquetas (décadas y límites en la misma fila) ----
     c.setStrokeColor(CL_NEGRO)
@@ -1491,9 +1547,9 @@ def _dibujar_pie(c, box, fn, fnb):
     Línea horizontal gruesa en el borde superior (todo el ancho útil), tres
     renglones centrados con los datos del laboratorio (constante `PIE` de
     `reporte.constantes`) y el número de página a la derecha, alineado al
-    centro del pie, en fuente más grande y sin negrita. Se dibuja en cada
-    página del documento; el número lo entrega el propio canvas
-    (`getPageNumber`), así que se actualiza solo en documentos multipágina."""
+    centro del pie, en fuente más grande y sin negrita. Hoy el reporte se
+    emite en una sola página; el rótulo se arma con `getPageNumber()` para
+    que siga siendo correcto si algún día el documento crece."""
     from reportlab.lib import colors as rlcolors
     from reporte.constantes import PIE
 
@@ -1584,7 +1640,8 @@ def report_pdf(datos, res, ident, path):
     from reportlab.lib import colors as rlcolors
     from reportlab.pdfgen import canvas as _canvas
 
-    fn, fnb = _webfonts()
+    f = _webfonts()
+    fn, fnb = f.fn, f.fnb
 
     C_DK  = rlcolors.HexColor("#000000")
     C_MUT = rlcolors.HexColor("#6e7781")
@@ -1649,6 +1706,6 @@ def report_pdf(datos, res, ident, path):
 def preview_pdf(datos, res, ident):
     """Genera el PDF de vista previa en el directorio temporal."""
     import tempfile
-    pdf = os.path.join(tempfile.gettempdir(), "gradplas_preview.pdf")
+    pdf = os.path.join(tempfile.gettempdir(), _temp_prefix() + "preview.pdf")
     report_pdf(datos, res, ident, pdf)
     return pdf

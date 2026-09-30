@@ -4,10 +4,16 @@ Tema visual y widgets compartidos de la app.
 
 Cada seccion de ingreso/calculo hereda de `Seccion`, una tarjeta
 independiente con su propio modelo de datos y formula.
+
+`VERSION` identifica esta copia de la aplicación. No es la versión del
+formato de laboratorio, que se imprime en el encabezado del PDF
+(«CÓDIGO F-LAB-001 · VERSIÓN 1.0») y no depende de este número.
 """
 import re
 import tkinter as tk
 from tkinter import ttk
+
+VERSION = "2.0.0"
 
 BG    = "#f3f4f6"
 CARD  = "#ffffff"
@@ -16,11 +22,10 @@ ACC_D = "#333940"
 SUP   = "#d7dade"
 TXT   = "#20242a"
 MUT   = "#6e7781"
-OKC   = "#3c4751"
-WARNC = "#585f66"
 
-# Fuente de la app (Segoe UI; mantiene ω y demás símbolos unicode).
-FAM_SERIF = "Segoe UI"
+# Fuente de la app. Antes se llamaba `FAM_UI`, nombre engañoso: Segoe UI
+# es una sans serif; el nombre correcta es FAM_UI.
+FAM_UI = "Segoe UI"
 
 
 def validar_tecla(root, tipo="decimal"):
@@ -59,7 +64,7 @@ def aplicar_estilo(root):
                 font=("Segoe UI", 10, "bold"))
     s.configure("TEntry", fieldbackground="#ffffff", bordercolor=SUP,
                 insertcolor=TXT, padding=4,
-                font=(FAM_SERIF, 10))
+                font=(FAM_UI, 10))
     s.map("TEntry", bordercolor=[("focus", ACC)])
     s.configure("Accent.TButton", background=ACC, foreground="#ffffff",
                 padding=[14, 8], font=("Segoe UI", 10, "bold"), bordercolor=ACC)
@@ -72,7 +77,7 @@ def aplicar_estilo(root):
                 background="#ffffff", foreground=TXT, arrowcolor=ACC,
                 bordercolor=SUP, lightcolor=BG, darkcolor=BG, relief="flat",
                 padding=[6, 5], insertcolor=TXT, selectbackground="#ffffff",
-                selectforeground=TXT, font=(FAM_SERIF, 10))
+                selectforeground=TXT, font=(FAM_UI, 10))
     s.map("Ejemplo.TCombobox",
           fieldbackground=[("readonly", "#ffffff"), ("focus", "#ffffff")],
           foreground=[("readonly", TXT)],
@@ -82,18 +87,18 @@ def aplicar_estilo(root):
     root.option_add("*TCombobox*Listbox.foreground", TXT)
     root.option_add("*TCombobox*Listbox.selectBackground", "#dfe6f2")
     root.option_add("*TCombobox*Listbox.selectForeground", TXT)
-    root.option_add("*TCombobox*Listbox.font", (FAM_SERIF, 10))
+    root.option_add("*TCombobox*Listbox.font", (FAM_UI, 10))
     s.configure("Key.TLabel", background=CARD, foreground=MUT,
-                font=(FAM_SERIF, 9))
+                font=(FAM_UI, 9))
     s.configure("Val.TLabel", background=CARD, foreground=TXT,
-                font=(FAM_SERIF, 10))
+                font=(FAM_UI, 10))
     s.configure("Res.TLabel", background=CARD, foreground=TXT,
-                font=(FAM_SERIF, 12, "bold"))
+                font=(FAM_UI, 12, "bold"))
     s.configure("Nota.TLabel", background=CARD, foreground=MUT,
-                font=(FAM_SERIF, 8))
+                font=(FAM_UI, 8))
     s.configure("Res.TEntry", fieldbackground="#ffffff", bordercolor=ACC,
                 borderwidth=1, padding=5, insertcolor=TXT,
-                font=(FAM_SERIF, 12, "bold"))
+                font=(FAM_UI, 12, "bold"))
     s.map("Res.TEntry", bordercolor=[("focus", ACC_D)])
 
 
@@ -230,7 +235,7 @@ class ToolTip:
         w.geometry("+%d+%d" % (self.widget.winfo_pointerx() + 14,
                                self.widget.winfo_pointery() + 12))
         tk.Label(w, text=self.text, justify="left", bg="#2b3138", fg="#f5f6f7",
-                 font=(FAM_SERIF, 10), padx=8, pady=5, wraplength=260).pack()
+                 font=(FAM_UI, 10), padx=8, pady=5, wraplength=260).pack()
         self.tip = w
         w.bind("<Button-1>", lambda _: self.ocultar())
 
@@ -248,7 +253,7 @@ class ToolTip:
 
 def ayuda(parent, texto):
     """Símbolo de ayuda discreto: '?' en gris claro."""
-    lbl = tk.Label(parent, text="?", font=(FAM_SERIF, 10),
+    lbl = tk.Label(parent, text="?", font=(FAM_UI, 10),
                    fg="#a9b1b9", bg=CARD, cursor="question_arrow")
     ToolTip(lbl, texto)
     return lbl
@@ -256,7 +261,7 @@ def ayuda(parent, texto):
 
 def ayuda_seccion(card, texto):
     """Un único símbolo de ayuda por tarjeta, en la fila del título, a la derecha."""
-    lbl = tk.Label(card, text="?", font=(FAM_SERIF, 11, "bold"),
+    lbl = tk.Label(card, text="?", font=(FAM_UI, 11, "bold"),
                    fg="#8a929c", bg=CARD, cursor="question_arrow")
     ToolTip(lbl, texto)
     lbl.place(relx=1.0, x=-6, y=-26, anchor="ne")
@@ -283,12 +288,12 @@ class SelectDropdown(ttk.Frame):
         e = tk.Entry(frm, textvariable=self.var, bd=0, relief="flat",
                      highlightthickness=0, bg="#ffffff", fg=TXT,
                      readonlybackground="#ffffff", disabledforeground=TXT,
-                     insertbackground=TXT, font=(FAM_SERIF, 10), width=ancho,
+                     insertbackground=TXT, font=(FAM_UI, 10), width=ancho,
                      state="readonly")
         e.pack(side="left", fill="x", expand=True, ipady=4, padx=(6, 0))
         self.entry = e
         flecha = tk.Label(frm, text="▾", bg="#ffffff", fg=ACC,
-                          font=(FAM_SERIF, 8), cursor="hand2")
+                          font=(FAM_UI, 8), cursor="hand2")
         flecha.pack(side="right", padx=(0, 6))
         self._flecha = flecha
         for wdg in (frm, e, flecha):
@@ -322,7 +327,7 @@ class SelectDropdown(ttk.Frame):
         cont.pack(fill="both", expand=True)
 
         lb = tk.Listbox(cont, bd=0, relief="flat", bg="#ffffff", fg=TXT,
-                        font=(FAM_SERIF, 10), highlightthickness=0,
+                        font=(FAM_UI, 10), highlightthickness=0,
                         selectbackground="#dfe6f2", selectforeground=TXT,
                         activestyle="none", exportselection=False,
                         width=max(9, max((len(v) for v in self._values),
@@ -420,25 +425,6 @@ class Seccion(ttk.LabelFrame):
         for v in var:
             self._vars.append(v)
 
-    def variables(self):
-        return list(self._vars)
-
-    # -- helpers de layout ----
-    def entrada(self, parent, r, c, var, w=None):
-        e = ttk.Entry(parent, textvariable=var, width=w or self.ancho_entrada)
-        e.grid(row=r, column=c, padx=3, pady=2, sticky="w")
-        return e
-
-    def etiqueta(self, parent, r, c, texto, **kw):
-        ttk.Label(parent, text=texto).grid(row=r, column=c, sticky="e",
-                                           padx=(2, 6), pady=2, **kw)
-
-    def cabecera(self, parent, r, textos):
-        for c, h in enumerate(textos):
-            ttk.Label(parent, text=h, font=("Segoe UI", 8, "bold"),
-                      background=CARD, foreground=MUT).grid(row=r, column=c,
-                                                            padx=2, pady=(0, 2))
-
     # -- interfaz comun ----
     def bind_cambio(self, cb):
         for v in self._vars:
@@ -452,10 +438,6 @@ class Seccion(ttk.LabelFrame):
         raise NotImplementedError
 
     def leer(self):
-        raise NotImplementedError
-
-    def calcular(self):
-        """Devuelve dict con los resultados de esta seccion."""
         raise NotImplementedError
 
     def mostrar(self, res):

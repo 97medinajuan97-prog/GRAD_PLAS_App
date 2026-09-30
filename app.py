@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D, BG,
-                      CARD, MUT, SUP, TXT, FAM_SERIF, validar_tecla,
+                      CARD, MUT, SUP, TXT, FAM_UI, VERSION, validar_tecla,
                       ayuda_seccion, SelectDropdown)
 from secciones.humedad import Humedad
 from secciones.limites import Limites
@@ -16,7 +16,11 @@ from secciones.granulometria import Granulometria
 from motor.calculo import calcular as motor_calcular, fnum
 from datos_ejemplo import datos_ejemplo, SIMBOLOS
 
-CAB_TXT = "#e5e8ec"
+#: Título de la ventana. Antes se escribía literal dos veces (título del
+#: `Tk` y rótulo de la franja superior) y cualquier corrección había que
+#: replicarla en ambos sitios, con el riesgo de que se desincronizaran.
+TITULO = ("Granulometría · Límites de Atterberg · Humedad natural"
+          " — INV E-123 · E-125 · E-126")
 
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
          "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -25,7 +29,7 @@ MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Granulometría · Límites de Atterberg · Humedad natural — INV E-123 · E-125 · E-126")
+        self.title("%s  ·  v%s" % (TITULO, VERSION))
         self.configure(bg=BG)
         self.minsize(1020, 620)
         aplicar_estilo(self)
@@ -48,8 +52,8 @@ class App(tk.Tk):
     def _build(self):
         cab = tk.Frame(self, bg=ACC, padx=16, pady=8)
         cab.pack(fill="x")
-        tk.Label(cab, text="Granulometría · Límites de Atterberg · Humedad natural — INV E-123 · E-125 · E-126",
-                 bg=ACC, fg="#ffffff", font=("Segoe UI", 12, "bold")).pack(anchor="center")
+        tk.Label(cab, text="%s  ·  v%s" % (TITULO, VERSION),
+                 bg=ACC, fg="#ffffff", font=(FAM_UI, 12, "bold")).pack(anchor="center")
 
         split = tk.Frame(self, bg=BG)
         split.pack(fill="both", expand=True, padx=10, pady=(6, 10))
@@ -85,7 +89,7 @@ class App(tk.Tk):
 
         bot = ttk.Frame(left)
         bot.pack(fill="x", pady=(4, 2))
-        tk.Label(bot, text="Ejemplo:", bg=BG, fg=MUT, font=(FAM_SERIF, 10),
+        tk.Label(bot, text="Ejemplo:", bg=BG, fg=MUT, font=(FAM_UI, 10),
                  pady=4).pack(side="left", padx=(4, 0))
         self.ejemplo_tipo = SelectDropdown(bot, ["Aleatorio"] + list(SIMBOLOS),
                                            inicial="Aleatorio", ancho=9)
@@ -99,11 +103,11 @@ class App(tk.Tk):
         bar = ttk.Frame(self.right)
         bar.pack(fill="x", pady=(0, 4))
         ttk.Label(bar, text="Reporte en vivo", style="TLabel",
-                  font=("Segoe UI", 11, "bold")).pack(side="left")
+                  font=(FAM_UI, 11, "bold")).pack(side="left")
         ttk.Button(bar, text="Guardar PDF", style="Accent.TButton",
                    command=self._pdf).pack(side="right", padx=2)
         ttk.Label(self.right, text="Edita los datos a la izquierda y este reporte se actualiza solo.",
-                  foreground="#6e7781", font=("Segoe UI", 8)).pack(anchor="w", pady=(0, 4))
+                  foreground="#6e7781", font=(FAM_UI, 8)).pack(anchor="w", pady=(0, 4))
         self.report_area = ttk.Frame(self.right)
         self.report_area.pack(fill="both", expand=True)
         self._imgs = []
@@ -140,7 +144,7 @@ class App(tk.Tk):
         self.ident_ents = []
         for i, (k, lab, tip, cal) in enumerate(campos):
             tk.Label(f, text=lab, bg=CARD, fg=TXT,
-                     font=(FAM_SERIF, 10)).grid(row=i, column=0,
+                     font=(FAM_UI, 10)).grid(row=i, column=0,
                                                 sticky="e", padx=(2, 6), pady=2)
             frm = tk.Frame(f, bg=CARD, highlightbackground=SUP,
                            highlightthickness=1)
@@ -165,7 +169,7 @@ class App(tk.Tk):
         # ---------------- profundidad: rango "6.00 m a 5.60 m" ----------------
         i = len(campos)
         tk.Label(f, text="Profundidad (m)", bg=CARD, fg=TXT,
-                 font=(FAM_SERIF, 10)).grid(row=i, column=0,
+                 font=(FAM_UI, 10)).grid(row=i, column=0,
                                             sticky="e", padx=(2, 6), pady=2)
         pfrm = tk.Frame(f, bg=CARD)
         pfrm.grid(row=i, column=1, padx=3, pady=2, sticky="ew")
@@ -174,16 +178,16 @@ class App(tk.Tk):
         f1.pack(side="left", fill="both", expand=True)
         d1 = self._entry_ident(f1, self.idvars["prof_desde"], "prof", width=8)
         d1.pack(side="left", fill="x", expand=True, ipady=2, padx=(5, 0))
-        tk.Label(f1, text="m", bg=CARD, fg=MUT, font=(FAM_SERIF, 8),
+        tk.Label(f1, text="m", bg=CARD, fg=MUT, font=(FAM_UI, 8),
                  padx=2).pack(side="right")
-        tk.Label(pfrm, text="a", bg=CARD, fg=TXT, font=(FAM_SERIF, 10)
+        tk.Label(pfrm, text="a", bg=CARD, fg=TXT, font=(FAM_UI, 10)
                  ).pack(side="left", padx=(6, 6))
         f2 = tk.Frame(pfrm, bg=CARD, highlightbackground=SUP,
                       highlightthickness=1)
         f2.pack(side="left", fill="both", expand=True)
         d2 = self._entry_ident(f2, self.idvars["prof_hasta"], "prof", width=8)
         d2.pack(side="left", fill="x", expand=True, ipady=2, padx=(5, 0))
-        tk.Label(f2, text="m", bg=CARD, fg=MUT, font=(FAM_SERIF, 8),
+        tk.Label(f2, text="m", bg=CARD, fg=MUT, font=(FAM_UI, 8),
                  padx=2).pack(side="right")
         base = len(self.ident_ents)
         for rel, wdg in ((0, d1), (1, d2)):
@@ -196,13 +200,13 @@ class App(tk.Tk):
         # ---------------- descripción material (texto largo) ----------------
         i += 1
         tk.Label(f, text="Descripción material", bg=CARD, fg=TXT,
-                 font=(FAM_SERIF, 10)).grid(row=i, column=0, sticky="ne",
+                 font=(FAM_UI, 10)).grid(row=i, column=0, sticky="ne",
                                             padx=(2, 6), pady=2)
         dfrm = tk.Frame(f, bg=CARD, highlightbackground=SUP, highlightthickness=1)
         dfrm.grid(row=i, column=1, padx=3, pady=2, sticky="ew")
         self.ident_desc = tk.Text(dfrm, bd=0, relief="flat",
                                   highlightthickness=0, bg=CARD, fg=TXT,
-                                  insertbackground=TXT, font=(FAM_SERIF, 10),
+                                  insertbackground=TXT, font=(FAM_UI, 10),
                                   height=1, wrap="word", undo=True)
         self.ident_desc.pack(fill="x", padx=5, pady=2)
         self.ident_desc.bind("<FocusIn>", lambda ev, fw=dfrm: fw.config(
@@ -233,7 +237,7 @@ class App(tk.Tk):
         """Crea un campo de entrada validado según el tipo de dato."""
         e = tk.Entry(parent, textvariable=var, bd=0, relief="flat",
                      highlightthickness=0, bg=CARD, fg=TXT,
-                     insertbackground=TXT, font=(FAM_SERIF, 10), width=width,
+                     insertbackground=TXT, font=(FAM_UI, 10), width=width,
                      validate="key",
                      validatecommand=(self._cmd_ident(tip), "%P"))
         e.bind("<FocusIn>", lambda ev, fw=parent: fw.config(
@@ -351,14 +355,14 @@ class App(tk.Tk):
         cab = tk.Frame(top, bg=CARD)
         cab.pack(fill="x", padx=6, pady=(6, 2))
         tk.Button(cab, text="◀", bg=CARD, fg=TXT, relief="flat",
-                  activebackground=SUP, font=(FAM_SERIF, 9, "bold"),
+                  activebackground=SUP, font=(FAM_UI, 9, "bold"),
                   command=lambda: self._cal_mover(anio, mes, -1, pintar)
                   ).pack(side="left", padx=2)
         titulo = tk.Label(cab, text="", bg=CARD, fg=ACC,
-                          font=(FAM_SERIF, 10, "bold"))
+                          font=(FAM_UI, 10, "bold"))
         titulo.pack(side="left", expand=True)
         tk.Button(cab, text="▶", bg=CARD, fg=TXT, relief="flat",
-                  activebackground=SUP, font=(FAM_SERIF, 9, "bold"),
+                  activebackground=SUP, font=(FAM_UI, 9, "bold"),
                   command=lambda: self._cal_mover(anio, mes, +1, pintar)
                   ).pack(side="left", padx=2)
 
@@ -366,7 +370,7 @@ class App(tk.Tk):
         sem.pack(fill="x", padx=6)
         for d in ("L", "M", "M", "J", "V", "S", "D"):
             tk.Label(sem, text=d, bg=CARD, fg=MUT, width=2,
-                     font=(FAM_SERIF, 8)).pack(side="left", expand=True)
+                     font=(FAM_UI, 8)).pack(side="left", expand=True)
 
         dias = tk.Frame(top, bg=CARD)
         dias.pack(fill="x", padx=6, pady=(1, 3))
@@ -375,7 +379,7 @@ class App(tk.Tk):
             for cj in range(7):
                 b = tk.Button(dias, text="", bg=CARD, fg=TXT, relief="flat",
                               activebackground=SUP, width=2,
-                              font=(FAM_SERIF, 8))
+                              font=(FAM_UI, 8))
                 b.grid(row=fi, column=cj, sticky="nsew", padx=0, pady=1)
                 celdas.append(b)
 
@@ -406,7 +410,7 @@ class App(tk.Tk):
         pie.pack(fill="x", padx=6, pady=(0, 6))
         tk.Button(pie, text="Hoy  %s" % hoy.strftime("%d/%m/%Y"), bg=ACC,
                   fg="#ffffff", activebackground=ACC_D, relief="flat",
-                  font=(FAM_SERIF, 9, "bold"),
+                  font=(FAM_UI, 9, "bold"),
                   command=lambda: seleccionar(hoy)).pack(fill="x", ipady=1)
 
         pintar()
@@ -576,12 +580,14 @@ class App(tk.Tk):
         for w in self.report_area.winfo_children():
             w.destroy()
         ttk.Label(self.report_area, text=text, foreground="#6e7781",
-                  font=("Segoe UI", 9), justify="left").pack(anchor="w", pady=8)
+                  font=(FAM_UI, 9), justify="left").pack(anchor="w", pady=8)
 
     # ---------------- guardar PDF ----------------
     def _pdf(self):
         try:
-            import reportlab
+            # Sonda de disponibilidad: no se usa el módulo, solo se comprueba
+            # que esté instalado para poder avisar con un mensaje claro.
+            import reportlab  # noqa: F401
         except ImportError:
             messagebox.showerror("Guardar PDF",
                                  "No se encontró reportlab.\nInstala con:  pip install reportlab")

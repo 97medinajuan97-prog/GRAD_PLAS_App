@@ -107,10 +107,12 @@ def _pesos(p, Ws):
 def _composicion(p, Ws, LL, IP, np_):
     pesos = _pesos(p, Ws)
     g = calcular_granulometria({"total": Ws, "pesos": pesos})
-    sucs, desc = clasificar(g["f200"], g["grava"], g["arena"], g["cu"],
-                            g["cc"], LL, IP, np_=np_)
+    sucs, _desc = clasificar(g["f200"], g["grava"], g["arena"], g["cu"],
+                             g["cc"], LL, IP, np_=np_)
+    # `_desc` no se propaga: la descripción del material se arma aparte con
+    # `descripcion_sucs` (ver `_descripcion`), que es la que llega al PDF.
     return {
-        "sucs": sucs, "desc": desc, "tipo": g["tipo"],
+        "sucs": sucs, "tipo": g["tipo"],
         "grava": g["grava"], "arena": g["arena"], "finos": g["f200"],
         "cu": g["cu"], "cc": g["cc"],
     }

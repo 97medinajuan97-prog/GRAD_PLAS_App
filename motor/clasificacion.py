@@ -196,35 +196,88 @@ def _frase(head, mods):
     return (head + " " + _conj(mods)).rstrip() + "."
 
 
+def _le(v, lim):
+    """True solo si `v` es conocido y cumple `v <= lim`.
+
+    Un dato ausente NO cuenta como "cumple el criterio": clasificar sin el
+    dato es inventar un resultado, así que se trata como no evaluable.
+    """
+    return v is not None and v <= lim
+
+
 def grupo_aashto(F10, F40, F200, LL, PI):
-    """Grupo AASHTO según %pasa N°10, N°40, N°200 y plasticidad."""
+    """Grupo AASHTO según %pasa N°10, N°40, N°200 y plasticidad.
+
+    Devuelve `None` cuando faltan los datos necesarios para decidir con
+    certeza: clasificar con datos incompletos emitiría un grupo confiado
+    pero falso, que es peor que no clasificar. En ese caso el llamador
+    informa qué dato falta (ver `motor.calculo` -> `aashto_faltan`).
+    """
+    if F200 is None:
+        return None          # sin granulometría no hay grupo
+    if PI is None:
+        return None          # todo grupo AASHTO necesita el índice de plasticidad
     if F200 <= 35:
-        if (F10 is None or F10 <= 50) and (F40 is None or F40 <= 30) and (F200 is None or F200 <= 15) and (PI is None or PI <= 6):
+        # A-1-a / A-1-b / A-3 son los únicos que no dependen de LL.
+        if _le(F10, 50) and _le(F40, 30) and F200 <= 15 and PI <= 6:
             return "A-1-a"
-        if (F40 is None or F40 <= 50) and (F200 is None or F200 <= 25) and (PI is None or PI <= 6):
+        if _le(F40, 50) and F200 <= 25 and PI <= 6:
             return "A-1-b"
-        if (F40 is None or F40 >= 51) and (F200 is None or F200 <= 10) and (PI is None or PI <= 0):
+        if F40 is not None and F40 > 50 and F200 <= 10 and PI <= 0:
             return "A-3"
-        if (LL is None or LL <= 40) and (PI is None or PI <= 10):
+        # A-2-4/5/6 dependen de LL: sin él no se puede escoger entre ellas.
+        if LL is None:
+            return None
+        if LL <= 40 and PI <= 10:
             return "A-2-4"
-        if LL is not None and LL > 40 and (PI is None or PI <= 10):
+        if LL > 40 and PI <= 10:
             return "A-2-5"
-        if (LL is None or LL <= 40) and PI is not None and PI > 10:
+        if LL <= 40 and PI > 10:
             return "A-2-6"
         return "A-2-7"
-    if (LL is None or LL <= 40) and (PI is None or PI <= 10):
+    if LL is None:
+        return None          # A-4/5/6/7 dependen de LL
+    if LL <= 40 and PI <= 10:
         return "A-4"
-    if LL is not None and LL > 40 and (PI is None or PI <= 10):
+    if LL > 40 and PI <= 10:
         return "A-5"
-    if (LL is None or LL <= 40) and PI is not None and PI > 10:
+    if LL <= 40 and PI > 10:
         return "A-6"
-    if PI is not None and LL is not None and PI <= LL - 30:
+    if PI <= LL - 30:
         return "A-7-5"
     return "A-7-6"
 
 
+def aashto_faltantes(F10, F40, F200, LL, PI):
+    """Etiquetas de los datos que impiden clasificar en AASHTO.
+
+    Lista vacía = clasificable (o ya clasificado). Se usa para que la
+    interfaz pueda decir *qué* falta y no limitarse a mostrar un guion.
+    """
+    faltan = []
+    if F200 is None:
+        faltan.append("granulometría")
+    if LL is None:
+        faltan.append("LL")
+    if PI is None and not faltan:
+        # Solo tiene sentido si el suelo es plástico: un suelo no plástico
+        # (NP) sí tiene grupo, y se resuelve con PI = 0 aguas arriba.
+        faltan.append("IP")
+    if not faltan and F200 <= 35 and F40 is None:
+        faltan.append("granulometría")
+    return faltan
+
+
 def indice_grupo(F200, LL, PI):
-    """Índice de grupo (AASHTO): IG = 0.2a + 0.005ac + 0.01bd."""
+    """Índice de grupo (AASHTO): IG = 0.2a + 0.005ac + 0.01bd.
+
+    Devuelve `None` si faltan datos: el índice no puede calcularse sin
+    ellos y un 0 silencioso se confundiría con "material sin contributos".
+    """
+    if F200 is None or PI is None:
+        return None
+    if PI > 10 and LL is None:
+        return None
     a = max(0, min(40, F200 - 35))
     b = max(0, min(40, F200 - 15))
     c = 0 if PI <= 10 else max(0, min(20, LL - 40))

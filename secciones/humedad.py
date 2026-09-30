@@ -13,14 +13,16 @@ allí aparece solo como "Peso antes de lavado (w1)".
 import tkinter as tk
 
 from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, ToolTip,
-                      FAM_SERIF, validar_tecla, ayuda_seccion)
+                      FAM_UI, validar_tecla, ayuda_seccion)
 from motor.calculo import fnum
 
 
-def calcular_humedad(ht, peso_total=None):
+def calcular_humedad(ht):
     """Fórmula pura (sin UI). ht: dict recip/hum/seco.
 
-    Devuelve ω%, peso del agua (Ww), peso del suelo seco (Ws) y el W seco."""
+    Devuelve ω%, peso del agua (Ww), peso del suelo seco (Ws) y el W seco.
+    `Ws` es el total que consume la granulometría como peso seco de la
+    muestra, así que ambos ensayos quedan atados por este mismo valor."""
     recip = ht.get("recip")
     hum = ht.get("hum")
     seco = ht.get("seco")
@@ -96,7 +98,7 @@ class Humedad(Seccion):
         self._bind_navegacion()
 
         self.aviso_lbl = tk.Label(self, text="", foreground="#a0432e",
-                                  bg=CARD, font=(FAM_SERIF, 9, "bold"))
+                                  bg=CARD, font=(FAM_UI, 9, "bold"))
         self.aviso_lbl.grid(row=2, column=0, columnspan=2, sticky="e",
                             padx=2, pady=(4, 0))
         self._aviso_tip = ToolTip(self.aviso_lbl, "")
@@ -126,10 +128,10 @@ class Humedad(Seccion):
         simbolo, unidad, _sig = self.D[clave]
         lbl = tk.Frame(parent, bg=CARD)
         lbl.grid(row=fila, column=0, sticky="w", pady=2)
-        tk.Label(lbl, text=simbolo, font=(FAM_SERIF, 10), fg=TXT,
+        tk.Label(lbl, text=simbolo, font=(FAM_UI, 10), fg=TXT,
                  bg=CARD).pack(side="left")
         if unidad:
-            tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_SERIF, 10),
+            tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_UI, 10),
                      fg=MUT, bg=CARD).pack(side="left")
         editable = clave in ("id", "recip", "hum", "seco")
         frm, num = self.caja(parent, getattr(self, "v_" + clave), unidad,
@@ -151,7 +153,7 @@ class Humedad(Seccion):
                        highlightthickness=0, bg=bg, fg=TXT, insertbackground=TXT,
                        disabledbackground=bg, readonlybackground=bg,
                        justify="center",
-                       font=(FAM_SERIF, 10), width=7,
+                       font=(FAM_UI, 10), width=7,
                        state="normal" if editable else "readonly",
                        validate="key" if editable and tipo != "texto" else "none",
                        validatecommand=(self._val_dec, "%P")
@@ -209,9 +211,6 @@ class Humedad(Seccion):
                 "recip": fnum(self.v_recip.get()),
                 "hum": fnum(self.v_hum.get()),
                 "seco": fnum(self.v_seco.get())}
-
-    def calcular(self):  # requisito de la base
-        return calcular_humedad(self.leer())
 
     def mostrar(self, res):
         agua = res.get("w_agua")

@@ -12,10 +12,9 @@ lavado (w2) = w1 − retenido en el fondo.
 """
 import math
 import tkinter as tk
-from tkinter import ttk
 
 from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, ToolTip,
-                      FAM_SERIF, validar_tecla, ayuda_seccion)
+                      FAM_UI, validar_tecla, ayuda_seccion)
 from motor.calculo import fnum
 
 SIEVES = [
@@ -159,7 +158,7 @@ class Granulometria(Seccion):
         self._bind_navegacion()
 
         self.aviso_lbl = tk.Label(self, text="", foreground="#a0432e",
-                                  bg=CARD, font=(FAM_SERIF, 9, "bold"))
+                                  bg=CARD, font=(FAM_UI, 9, "bold"))
         self.aviso_lbl.grid(row=6, column=0, sticky="e", padx=2, pady=(6, 0))
         self._aviso_tip = ToolTip(self.aviso_lbl, "")
 
@@ -171,16 +170,16 @@ class Granulometria(Seccion):
         fila = tk.Frame(self, bg=CARD)
         fila.grid(row=0, column=0, sticky="w", pady=(0, 10))
         tk.Label(fila, text="W1",
-                 font=(FAM_SERIF, 10), fg=TXT, bg=CARD).pack(side="left")
+                 font=(FAM_UI, 10), fg=TXT, bg=CARD).pack(side="left")
         tk.Label(fila, text=" (g)",
-                 font=(FAM_SERIF, 10), fg=MUT, bg=CARD).pack(side="left")
+                 font=(FAM_UI, 10), fg=MUT, bg=CARD).pack(side="left")
         frm, num = self.caja(fila, self.v_w1, editable=False)
         frm.pack(side="left", padx=(10, 0))
         tk.Label(fila, text="W2",
-                 font=(FAM_SERIF, 10), fg=TXT, bg=CARD).pack(side="left",
+                 font=(FAM_UI, 10), fg=TXT, bg=CARD).pack(side="left",
                                                              padx=(22, 0))
         tk.Label(fila, text=" (g)",
-                 font=(FAM_SERIF, 10), fg=MUT, bg=CARD).pack(side="left")
+                 font=(FAM_UI, 10), fg=MUT, bg=CARD).pack(side="left")
         frm2, num2 = self.caja(fila, self.v_w2l, editable=False)
         frm2.pack(side="left", padx=(10, 0))
 
@@ -197,10 +196,10 @@ class Granulometria(Seccion):
         cel.grid(row=0, column=col, sticky="ew", pady=(0, 2))
         lbl = tk.Frame(cel, bg=CARD)
         lbl.pack()
-        tk.Label(lbl, text=texto, font=(FAM_SERIF, 10),
+        tk.Label(lbl, text=texto, font=(FAM_UI, 10),
                  fg=TXT if negra else MUT, bg=CARD).pack(side="left")
         if unidad:
-            tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_SERIF, 10),
+            tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_UI, 10),
                      fg=MUT, bg=CARD).pack(side="left")
 
     def _build_tabla(self, tabla):
@@ -213,10 +212,10 @@ class Granulometria(Seccion):
         for i, (tam, d) in enumerate(SIEVES):
             r = i + 1
             tk.Label(tabla, text=tam, bg=CARD, fg=TXT,
-                     font=(FAM_SERIF, 10)).grid(row=r, column=0, sticky="w",
+                     font=(FAM_UI, 10)).grid(row=r, column=0, sticky="w",
                                                 padx=2, pady=2)
             tk.Label(tabla, text="%g" % d, bg=CARD, fg=TXT,
-                     font=(FAM_SERIF, 10)).grid(row=r, column=1, sticky="w",
+                     font=(FAM_UI, 10)).grid(row=r, column=1, sticky="w",
                                                 padx=2, pady=2)
             if tam == "FONDO":
                 frm, num = self.caja(tabla, self.v_fondo, editable=False)
@@ -249,10 +248,10 @@ class Granulometria(Seccion):
             cel.columnconfigure(1, weight=1)
             lbl = tk.Frame(cel, bg=CARD)
             lbl.grid(row=0, column=0, sticky="w")
-            tk.Label(lbl, text=simbolo, font=(FAM_SERIF, 10), fg=TXT,
+            tk.Label(lbl, text=simbolo, font=(FAM_UI, 10), fg=TXT,
                      bg=CARD).pack(side="left")
             if unidad:
-                tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_SERIF, 10),
+                tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_UI, 10),
                          fg=MUT, bg=CARD).pack(side="left")
             if var is not None:
                 frm, num = self.caja(cel, var, editable=False)
@@ -273,25 +272,25 @@ class Granulometria(Seccion):
         fila = tk.Frame(self, bg=CARD)
         fila.grid(row=4, column=0, sticky="w", pady=(4, 0))
         tk.Label(fila, text="Clase:", bg=CARD, fg=TXT,
-                 font=(FAM_SERIF, 10)).pack(side="left")
+                 font=(FAM_UI, 10)).pack(side="left")
         self.tipo_lbl = tk.Label(fila, text="—", bg=CARD, fg=TXT,
-                                 font=(FAM_SERIF, 10))
+                                 font=(FAM_UI, 10))
         self.tipo_lbl.pack(side="left", padx=(2, 16))
         tk.Label(fila, text="SUCs:", bg=CARD, fg=TXT,
-                 font=(FAM_SERIF, 10)).pack(side="left")
+                 font=(FAM_UI, 10)).pack(side="left")
         self.sucs_lbl = tk.Label(fila, text="—", bg=CARD, fg=TXT,
-                                 font=(FAM_SERIF, 10, "bold"))
+                                 font=(FAM_UI, 10, "bold"))
         self.sucs_lbl.pack(side="left", padx=(2, 0))
 
         self.sucs_desc = tk.Label(self, text="", bg=CARD, fg=MUT,
-                                  font=(FAM_SERIF, 9), anchor="w",
+                                  font=(FAM_UI, 9), anchor="w",
                                   justify="left", wraplength=390)
         self.sucs_desc.grid(row=5, column=0, sticky="ew", padx=2, pady=(2, 0))
 
     def _celda_res(self, parent, var, simbolo, unidad):
         fr = tk.Frame(parent, bg=CARD)
         fr.pack(side="left", padx=(0, 14))
-        tk.Label(fr, text=simbolo, font=(FAM_SERIF, 10), fg=MUT,
+        tk.Label(fr, text=simbolo, font=(FAM_UI, 10), fg=MUT,
                  bg=CARD).pack(side="left")
         frm, num = self.caja(fr, var, unidad, editable=False)
         frm.pack(side="left", padx=(6, 0))
@@ -309,7 +308,7 @@ class Granulometria(Seccion):
                        highlightthickness=0, bg=bg, fg=TXT,
                        disabledbackground=bg, disabledforeground=TXT,
                        readonlybackground=bg, insertbackground=TXT,
-                       justify="center", font=(FAM_SERIF, 10), width=ancho,
+                       justify="center", font=(FAM_UI, 10), width=ancho,
                        state="normal" if editable else "readonly",
                        validate="key" if editable else "none",
                        validatecommand=(self._val_dec, "%P") if editable else None)
@@ -368,9 +367,6 @@ class Granulometria(Seccion):
             pesos.append(fnum(v.get()))
         return {"total": None, "pesos": pesos}
 
-    def calcular(self):  # requisito de la base
-        return calcular_granulometria(self.leer())
-
     def mostrar(self, res):
         gt = res.get("g_total")
         self.v_w1.set("—" if gt is None else "%.2f" % gt)
@@ -395,10 +391,13 @@ class Granulometria(Seccion):
         for var, key in ((self.v_cu, "Cu"), (self.v_cc, "Cc")):
             v = res.get(key)
             var.set("—" if v is None else "%.2f" % v)
-        for var, key in ((self.v_grava, "g_grava"), (self.v_arena, "g_arena"),
-                         (self.v_finos, "g_finos")):
+        # Se leen las claves de composición ya redondeadas por el motor
+        # (g_*_1d): son las mismas que imprime la tabla del PDF, así que lo
+        # que se ve en pantalla y lo que sale en papel coinciden al dígito.
+        for var, key in ((self.v_grava, "g_grava_1d"), (self.v_arena, "g_arena_1d"),
+                         (self.v_finos, "g_finos_1d")):
             v = res.get(key)
-            var.set("—" if v is None else "%.2f" % v)
+            var.set("—" if v is None else "%.1f" % v)
 
         tipo = res.get("tipo")
         if tipo:
@@ -416,8 +415,12 @@ class Granulometria(Seccion):
 
         corto, detalle = aviso_incoherencia(self.leer()["pesos"], gt)
         if not corto:
-            ga, ar, fi = res.get("g_grava"), res.get("g_arena"), res.get("g_finos")
-            if None not in (ga, ar, fi) and abs(ga + ar + fi - 100.0) > 0.65:
+            # Se avisa sobre los valores mostrados (los redondeados), que son
+            # los que suman 100 % por construcción: el aviso debe describir lo
+            # que el usuario ve, no magnitudes intermedias.
+            ga, ar, fi = (res.get("g_grava_1d"), res.get("g_arena_1d"),
+                          res.get("g_finos_1d"))
+            if None not in (ga, ar, fi) and abs(ga + ar + fi - 100.0) > 0.05:
                 corto = "⚠ Grava+Arena+Finos ≠ 100 %"
                 detalle = ("La suma de %grava ({:.1f}) + %arena ({:.1f}) + "
                            "%finos ({:.1f}) debe dar 100 %.".format(ga, ar, fi))

@@ -6,7 +6,6 @@ Motor de cálculo: orquesta las secciones independientes.
 función de cálculo de esa sección y compone el resultado final (mismas claves
 que el formato validado) + clasificación y verificaciones.
 """
-import math
 
 
 def fnum(s):
@@ -31,10 +30,6 @@ def _w(recip, hum, seco):
     return (hum - seco) / (seco - recip) * 100
 
 
-def fstr(v, dec=2):
-    return "" if v is None else ("%.*f" % (dec, v))
-
-
 def calcular(data):
     """Calcula todos los resultados. `data` tiene las claves:
     hum, ll, lp, grano (misma forma que `datos_ejemplo`)."""
@@ -42,7 +37,8 @@ def calcular(data):
     from secciones.limite_liquido import calcular_ll
     from secciones.limite_plastico import calcular_lp
     from secciones.granulometria import calcular_granulometria
-    from motor.clasificacion import clasificar, grupo_aashto, indice_grupo
+    from motor.clasificacion import (clasificar, grupo_aashto, indice_grupo,
+                                     aashto_faltantes)
     from motor.verificaciones import verificaciones
 
     res = {}
@@ -77,11 +73,18 @@ def calcular(data):
         res["IP"] = (res["LL"] - res["LP"]) if (res["LL"] is not None and res["LP"] is not None) else None
 
     # ---- índices de liquidez (IL) y consistencia (IC) según w natural ----
+    # IP = 0 (LL == LP) no es un dato ausente sino una división por cero:
+    # IL e IC no están definidos. Se distingue del caso "sin datos" para no
+    # perder el motivo, y `verificaciones` lo reporta.
     IL = IC = None
+    res["ip_cero"] = False
     if (res["LL"] is not None and res["LP"] is not None
-            and res["w_nat"] is not None and res["IP"]):
-        IL = (res["w_nat"] - res["LP"]) / res["IP"]
-        IC = (res["LL"] - res["w_nat"]) / res["IP"]
+            and res["w_nat"] is not None and res["IP"] is not None):
+        if res["IP"] == 0:
+            res["ip_cero"] = True
+        else:
+            IL = (res["w_nat"] - res["LP"]) / res["IP"]
+            IC = (res["LL"] - res["w_nat"]) / res["IP"]
     res["IL"] = IL
     res["IC"] = IC
 
@@ -104,6 +107,21 @@ def calcular(data):
     res["g_finos"] = g["finos"]
     res["tipo"] = g["tipo"]
 
+    # ---- composición para presentar (pantalla y PDF deben coincidir) ----
+    # Grava + Arena + Finos suman 100 % exactamente en aritmética real
+    # (grava = 100 − F4, arena = F4 − F200, finos = F200). Al imprimirlas a
+    # 1 decimal, redondear las tres por separado puede dar 99.9 o 100.1. Se
+    # redondean Grava y Arena y se obtiene Finos por diferencia, de modo que
+    # las tres celdas mostradas sumen siempre 100.0 %. Estas claves son las
+    # que leen tanto el resumen de la interfaz como la tabla del PDF.
+    gv, ar, fi = g["grava"], g["arena"], g["finos"]
+    if gv is not None and ar is not None and fi is not None:
+        res["g_grava_1d"] = round(gv, 1)
+        res["g_arena_1d"] = round(ar, 1)
+        res["g_finos_1d"] = round(100.0 - round(gv, 1) - round(ar, 1), 1)
+    else:
+        res["g_grava_1d"] = res["g_arena_1d"] = res["g_finos_1d"] = None
+
     # ---- clasificación ----
     Fn = g["f200"]
     LL2, PI2 = res["LL"], res["IP"]
@@ -111,14 +129,25 @@ def calcular(data):
                                  LL2, PI2, np_=res["ll_np"])
     res["sucs"] = sucs
     res["sucs_desc"] = sucs_desc
-    gpo = grupo_aashto(g["f10"], g["f40"], Fn, LL2, PI2) if Fn is not None else None
+    # AASHTO M 145: en un suelo no plástico el índice de plasticidad se toma
+    # como 0, no como "dato faltante". Sin esta sustitución un suelo NP
+    # quedaría sin clasificar, cuando sí tiene grupo propio.
+    ll_aa = 0.0 if res["ll_np"] else LL2
+    pi_aa = 0.0 if res["ll_np"] else PI2
+    gpo = grupo_aashto(g["f10"], g["f40"], Fn, ll_aa, pi_aa)
     res["grupo_aashto"] = gpo
-    res["ig"] = indice_grupo(Fn, LL2, PI2) if (Fn is not None and LL2 is not None and PI2 is not None) else None
+    # El índice de grupo sí exige plasticidad medida, así que un suelo NP
+    # no lo tiene: se informa solo el grupo, sin paréntesis.
+    res["ig"] = indice_grupo(Fn, LL2, PI2)
     res["aashto"] = ("%s (%d)" % (gpo, res["ig"])) if (gpo and res["ig"] is not None) else (gpo or None)
     res["aashto_desc"] = None
     if gpo:
         from motor.clasificacion import DESC_AASHTO
         res["aashto_desc"] = DESC_AASHTO.get(gpo[:3])
+    # Si no se pudo clasificar, se informa qué dato falta para que la interfaz
+    # lo diga en vez de mostrar un guion mudo.
+    res["aashto_faltan"] = [] if gpo else aashto_faltantes(
+        g["f10"], g["f40"], Fn, ll_aa, pi_aa)
 
     # ---- verificaciones ----
     res["checks"] = verificaciones(data, res, g)

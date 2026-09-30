@@ -8,13 +8,12 @@ LL, LP e IP se muestran en la misma fila. Un check permite declarar la
 muestra sin plasticidad (NP): deshabilita el ingreso y reporta NP.
 """
 import tkinter as tk
-from tkinter import ttk
 
 from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, ToolTip,
-                      FAM_SERIF, validar_tecla, ayuda_seccion)
+                      FAM_UI, validar_tecla, ayuda_seccion)
 from motor.calculo import fnum
-from secciones.limite_liquido import calcular_ll, aviso_incoherencia as aviso_ll
-from secciones.limite_plastico import calcular_lp, aviso_incoherencia as aviso_lp
+from secciones.limite_liquido import aviso_incoherencia as aviso_ll
+from secciones.limite_plastico import aviso_incoherencia as aviso_lp
 
 
 class Limites(Seccion):
@@ -65,7 +64,7 @@ class Limites(Seccion):
         cb = tk.Checkbutton(self, text="Suelo no plástico (NP)",
                             variable=self.v_np, command=self._toggle_np,
                             bg=CARD, fg=TXT, activebackground=CARD,
-                            font=(FAM_SERIF, 9), selectcolor="#ffffff",
+                            font=(FAM_UI, 9), selectcolor="#ffffff",
                             highlightthickness=0, cursor="hand2")
         cb.grid(row=0, column=0, sticky="w", pady=(0, 4))
         ToolTip(cb, "Suelo sin límites de consistencia: no presenta "
@@ -76,7 +75,7 @@ class Limites(Seccion):
         self.v_np.trace_add("write", lambda *_: self._aplicar_np())
 
         self.aviso_lbl = tk.Label(self, text="", foreground="#a0432e",
-                                  bg=CARD, font=(FAM_SERIF, 9, "bold"))
+                                  bg=CARD, font=(FAM_UI, 9, "bold"))
         self.aviso_lbl.grid(row=3, column=0, sticky="e", padx=2, pady=(6, 0))
         self._aviso_tip = ToolTip(self.aviso_lbl, "")
 
@@ -91,7 +90,7 @@ class Limites(Seccion):
 
         for texto in ("Límite líquido", "Límite plástico"):
             tk.Label(cuerpo, text=texto, bg=CARD, fg=ACC,
-                     font=(FAM_SERIF, 9, "bold")).pack(anchor="w",
+                     font=(FAM_UI, 9, "bold")).pack(anchor="w",
                                                        pady=(0, 2))
             if texto == "Límite líquido":
                 ll = tk.Frame(cuerpo, bg=CARD)
@@ -172,10 +171,10 @@ class Limites(Seccion):
         cel.grid(row=0, column=c, sticky="ew", pady=(0, 2))
         lbl = tk.Frame(cel, bg=CARD)
         lbl.pack()
-        tk.Label(lbl, text=texto, font=(FAM_SERIF, 10),
+        tk.Label(lbl, text=texto, font=(FAM_UI, 10),
                  fg=TXT if negra else MUT, bg=CARD).pack(side="left")
         if unidad:
-            tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_SERIF, 10),
+            tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_UI, 10),
                      fg=MUT, bg=CARD).pack(side="left")
 
     # ---------------- fila final: LL | LP | IP en la misma fila -------------
@@ -189,9 +188,9 @@ class Limites(Seccion):
     def _celda_res(self, parent, var, simbolo, sig, unidad):
         fr = tk.Frame(parent, bg=CARD)
         fr.pack(side="left", padx=(0, 16))
-        tk.Label(fr, text=simbolo, font=(FAM_SERIF, 10), fg=TXT,
+        tk.Label(fr, text=simbolo, font=(FAM_UI, 10), fg=TXT,
                  bg=CARD).pack(side="left")
-        tk.Label(fr, text=" (%s)" % unidad, font=(FAM_SERIF, 10), fg=MUT,
+        tk.Label(fr, text=" (%s)" % unidad, font=(FAM_UI, 10), fg=MUT,
                  bg=CARD).pack(side="left")
         frm, num = self.caja(fr, var, "", editable=False)
         frm.pack(side="left", pady=(2, 0))
@@ -224,7 +223,7 @@ class Limites(Seccion):
         num = tk.Entry(frm, textvariable=var, bd=0, relief="flat",
                        highlightthickness=0, bg=bg, fg=TXT, insertbackground=TXT,
                        disabledbackground=bg, readonlybackground=bg,
-                       justify="center", font=(FAM_SERIF, 10), width=ancho,
+                       justify="center", font=(FAM_UI, 10), width=ancho,
                        state="normal" if editable else "readonly",
                        validate="key" if usar_val else "none",
                        validatecommand=valcmd if usar_val else None)
@@ -304,13 +303,6 @@ class Limites(Seccion):
                        "hum": fnum(self.lp_v[i][2].get()),
                        "seco": fnum(self.lp_v[i][3].get())})
         return {"ll": ll, "lp": lp}
-
-    def calcular(self):  # requisito de la base
-        data = self.leer()
-        ll = {} if self.v_np.get() else calcular_ll(data["ll"])
-        lp = calcular_lp(data["lp"])
-        return {"ll_w": ll.get("w", [None] * 3), "LL": ll.get("LL"),
-                "lp_w": lp["w"], "LP": lp["LP"], "IP": lp["IP"]}
 
     def mostrar(self, res):
         np_ = bool(res.get("ll_np"))
