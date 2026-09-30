@@ -9,8 +9,8 @@ muestra sin plasticidad (NP): deshabilita el ingreso y reporta NP.
 """
 import tkinter as tk
 
-from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, ToolTip,
-                      FAM_UI, validar_tecla, ayuda_seccion)
+from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, AMBAR,
+                      NEGRO, ToolTip, FAM_UI, validar_tecla, ayuda_seccion)
 from motor.calculo import fnum
 from secciones.limite_liquido import aviso_incoherencia as aviso_ll
 from secciones.limite_plastico import aviso_incoherencia as aviso_lp
@@ -70,9 +70,15 @@ class Limites(Seccion):
         self._bind_navegacion()
         self.v_np.trace_add("write", lambda *_: self._aplicar_np())
 
-        self.aviso_lbl = tk.Label(self, text="", foreground="#a0432e",
-                                  bg=CARD, font=(FAM_UI, 9, "bold"))
+        # Chip de aviso: ambar de la paleta con texto negro encima
+        # (10.1:1). Antes era un rojo oscuro sobre blanco; el ambar se ve
+        # desde lejos y avisa sin gritar.
+        self.aviso_lbl = tk.Label(self, text="", foreground=NEGRO,
+                                  bg=AMBAR, font=(FAM_UI, 9, "bold"),
+                                  padx=6, pady=1)
         self.aviso_lbl.grid(row=3, column=0, sticky="e", padx=2, pady=(6, 0))
+        # sin texto no se muestra: el chip vacio era un cuadro ambar suelto
+        self.aviso_lbl.grid_remove()
         self._aviso_tip = ToolTip(self.aviso_lbl, "")
 
         self.columnconfigure(0, weight=1)

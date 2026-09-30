@@ -8,10 +8,12 @@ import re
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D, BG,
-                      CARD, MUT, SUP, TXT, FAM_UI, VERSION, validar_tecla,
-                      ayuda_seccion, SelectDropdown, habilitar_deshacer,
-                      ToolTip, FONDO_VISOR)
+from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D,
+                      BG,                       BORDE_HOJA, CARD, CREMA, MUT, SUP, TXT, FAM_UI,
+                      VERSION, validar_tecla, ayuda_seccion, SelectDropdown,
+                      habilitar_deshacer, ToolTip, FONDO_VISOR, BORDE,
+                      ZoomSlider)
+
 from secciones.humedad import Humedad
 from secciones.limites import Limites
 from secciones.granulometria import Granulometria
@@ -64,10 +66,11 @@ class App(tk.Tk):
         split = tk.Frame(self, bg=BG)
         split.pack(fill="both", expand=True, padx=10, pady=(6, 10))
         self.left_sc = ScrollableFrame(split)
-        # El visualizador lleva barra horizontal: al ampliar, la hoja es más
-        # ancha que el panel y hay que poder recorrerla de lado a lado.
+        # El visualizador lleva barra horizontal abajo y sin franja vertical:
+        # con el área de la hoja ocupando todo el ancho, esa franja tapaba lo
+        # que hubiera detrás.
         self.right_sc = ScrollableFrame(split, horizontal=True,
-                                        bg=FONDO_VISOR)
+                                        vertical_thumb=False, bg=FONDO_VISOR)
         # La barra de herramientas va FUERA del área que desplaza, como en un
         # lector de PDF. Dentro, el marco se ensancha con la hoja y la barra
         # se saldría de la ventana al ampliar.
@@ -175,22 +178,24 @@ class App(tk.Tk):
 
         # Los botones usan el fondo de la barra para no abrir huecos claros.
         mas = tk.Button(parent, text="+", font=(FAM_UI, 11, "bold"),
-                        bg=FONDO_VISOR, fg="#eef1f5", relief="flat", bd=0,
-                        width=2, activebackground="#6d747d", cursor="hand2",
+                        bg=FONDO_VISOR, fg=ACC, relief="flat", bd=0,
+                        width=2, activebackground=CREMA, cursor="hand2",
                         command=lambda: self._zoom_paso(+10))
         mas.pack(side="right", padx=(0, 2))
         ToolTip(mas, "Aumentar la ampliación.")
 
-        self._zoom = ttk.Scale(parent, from_=self.ZOOM_MIN, to=self.ZOOM_MAX,
-                               orient="horizontal", length=150,
-                               command=self._zoom_ir)
+        # Control propio y no ttk: clam pinta el tirador como una línea de 1 px del
+        # color del tema y aquí no se deja colorear.
+        self._zoom = ZoomSlider(parent, from_=self.ZOOM_MIN,
+                                to=self.ZOOM_MAX, length=150,
+                                bg=FONDO_VISOR, command=self._zoom_ir)
         # sin `expand`: si el deslizador creciera se comería el espacio y
         # sacaría de la barra el porcentaje, la etiqueta y el botón de PDF
         self._zoom.pack(side="right", padx=4)
 
         menos = tk.Button(parent, text="−", font=(FAM_UI, 11, "bold"),
-                          bg=FONDO_VISOR, fg="#eef1f5", relief="flat", bd=0,
-                          width=2, activebackground="#6d747d", cursor="hand2",
+                          bg=FONDO_VISOR, fg=ACC, relief="flat", bd=0,
+                          width=2, activebackground=CREMA, cursor="hand2",
                           command=lambda: self._zoom_paso(-10))
         menos.pack(side="right")
         ToolTip(menos, "Reducir la ampliación.")
@@ -283,8 +288,19 @@ class App(tk.Tk):
                            labelanchor="n")
         f.pack(fill="x", pady=2)
 
-        # --- carpeta de trabajo ---
-        caja = tk.Frame(f, bg=CARD, highlightbackground=SUP,
+        # --- acciones primero: son el uso principal de la sección ---
+        fila = ttk.Frame(f, style="Card.TFrame")
+        fila.pack(fill="x")
+        ttk.Button(fila, text="Abrir muestra", style="Accent.TButton",
+                   command=self._abrir_muestra).pack(side="left",
+                                                     padx=(0, 6))
+        ttk.Button(fila, text="Guardar muestra", style="Ghost.TButton",
+                   command=self._guardar_muestra).pack(side="left")
+
+        # --- carpeta de trabajo, debajo de los botones ---
+        tk.Label(f, text="Directorio de trabajo", bg=CARD, fg=MUT,
+                 font=(FAM_UI, 9), anchor="w").pack(fill="x", pady=(10, 2))
+        caja = tk.Frame(f, bg=CARD, highlightbackground=BORDE,
                         highlightthickness=1)
         caja.pack(fill="x")
         self.v_dir = tk.StringVar(value=self._leer_dir())
@@ -292,23 +308,18 @@ class App(tk.Tk):
                        highlightthickness=0, bg=CARD, fg=TXT, justify="left",
                        font=(FAM_UI, 9), insertbackground=TXT)
         ent.pack(side="left", fill="x", expand=True, ipady=2, padx=(5, 2))
+        ent.bind("<FocusIn>", lambda ev, w=caja: w.config(
+            highlightbackground=ACC, highlightthickness=1))
+        ent.bind("<FocusOut>", lambda ev, w=caja: w.config(
+            highlightbackground=BORDE, highlightthickness=1))
         ToolTip(ent, "Carpeta de trabajo. 'Guardar muestra' escribe aquí, "
                      "con el nombre que armen los datos de la muestra.")
         btn_dir = tk.Button(caja, text="📁", font=("Segoe UI Emoji", 9),
                             bg=CARD, fg=ACC, relief="flat", bd=0, padx=0,
-                            pady=0, activebackground=SUP, cursor="hand2",
+                            pady=0, activebackground=CREMA, cursor="hand2",
                             command=self._elegir_dir)
         btn_dir.pack(side="right", padx=(2, 3))
         ToolTip(btn_dir, "Elegir la carpeta de trabajo.")
-
-        # --- acciones ---
-        fila = ttk.Frame(f, style="Card.TFrame")
-        fila.pack(fill="x", pady=(8, 0))
-        ttk.Button(fila, text="Abrir muestra", style="Accent.TButton",
-                   command=self._abrir_muestra).pack(side="left",
-                                                     padx=(0, 6))
-        ttk.Button(fila, text="Guardar muestra", style="Ghost.TButton",
-                   command=self._guardar_muestra).pack(side="left")
         ayuda_seccion(
             f,
             "Carpeta de trabajo: donde se guardan las muestras.\n"
@@ -1019,14 +1030,14 @@ class App(tk.Tk):
         for img in imgs:
             # aire alrededor de la hoja, para que no quede pegada al borde
             lab = tk.Label(self.report_area, image=img, bg=FONDO_VISOR,
-                           highlightthickness=0)
+                           highlightthickness=1, highlightbackground=BORDE_HOJA)
             lab.pack(side="top",
                      padx=self.PAD_HOJA, pady=(self.PAD_HOJA, 0))
 
     def _show_preview_msg(self, text):
         for w in self.report_area.winfo_children():
             w.destroy()
-        ttk.Label(self.report_area, text=text, foreground="#6e7781",
+        ttk.Label(self.report_area, text=text, foreground=MUT,
                   font=(FAM_UI, 9), justify="left").pack(anchor="w", pady=8)
 
     # ---------------- guardar PDF ----------------

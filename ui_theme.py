@@ -15,20 +15,59 @@ from tkinter import ttk
 
 VERSION = "2.0.0"
 
-BG    = "#f3f4f6"
-CARD  = "#ffffff"
-ACC   = "#40464f"
-ACC_D = "#333940"
-SUP   = "#d7dade"
-TXT   = "#20242a"
-MUT   = "#6e7781"
+# --------------------------------------------------------------------------
+# Paleta de la identidad (color_theme.jpeg)
+#
+#   #223A59  azul marino -> acento: cabecera, rótulos, botón principal, foco
+#   #F2F2F2  gris claro  -> fondo de la aplicación
+#   #F2AE30  ámbar       -> resalte: chip de aviso, superficies activas
+#   #F2DAAC  crema       -> superficie cálida: hover, bandas suaves
+#   #0D0D0D  negro       -> texto principal
+#
+# Los contrastes se comprobaron contra WCAG 2.1 (texto normal >= 4.5:1,
+# componentes de interfaz >= 3:1). Los pares que se usan en la app:
+#
+#   texto principal sobre tarjeta   19.4:1      texto de la cabecera 11.6:1
+#   texto secundario sobre tarjeta  6.0:1      botón principal      11.6:1
+#   rótulo de sección (azul)        11.6:1      chip de aviso       10.1:1
+#   banda cálida (azul/crema)        8.5:1      texto de aviso       7.2:1
+#   pulgar de la barra (azul/plano)  9.2:1      borde de campo       3.1:1
+#
+# El ÁMBAR no se usa como anillo de foco: sobre blanco da 1.9:1 y no se
+# distinguiría. El foco va en azul marino (11.6:1). El ámbar sí funciona
+# como chip de aviso, con texto negro encima.
+# --------------------------------------------------------------------------
+AZUL  = "#223A59"          # acento de la identidad
+AMBAR = "#F2AE30"          # resalte
+CREMA = "#F2DAAC"          # superficie cálida
+NEGRO = "#0D0D0D"          # texto principal
 
-#: Fondo del panel donde se ve el reporte. Más oscuro que BG a propósito: la
-#: hoja es blanca y necesita un marco visible para no perderse en la ventana.
-FONDO_VISOR = "#565d66"
+#: nombre heredado por el que se llama desde la app
+ACC   = AZUL
+ACC_D = "#162A44"          # azul más oscuro: hover y activo
+BG    = "#F2F2F2"          # fondo de la aplicación
+CARD  = "#ffffff"          # tarjetas y campos de ingreso
+SUP   = "#E2E5EA"          # superficies suaves
+BORDE = "#8A93A0"          # borde visible de los campos
+TXT   = NEGRO
+MUT   = "#5A6472"          # texto secundario
+AVISO = "#7A4E00"          # texto de aviso: ámbar oscuro, legible
 
-# Fuente de la app. Antes se llamaba `FAM_UI`, nombre engañoso: Segoe UI
+#: plano y pulgar de las barras de desplazamiento
+PLANO_BARRA = "#DFE3E9"
+PULGAR = AZUL
+
+#: Fondo del panel donde se ve el reporte. Claro a propósito: con fondo
+#: oscuro la hoja blanca se recortaba como un parche y costaba leer el resto
+#: de la ventana. La separación la hace el aire alrededor de la hoja más un
+#: borde fino.
+FONDO_VISOR = "#F2F2F2"
+#: borde de la hoja dentro del visualizador
+BORDE_HOJA = "#C6CBD4"
+
+# Fuente de la app. Antes se llamaba `FAM_SERIF`, nombre engañoso: Segoe UI
 # es una sans serif; el nombre correcta es FAM_UI.
+
 FAM_UI = "Segoe UI"
 
 
@@ -175,26 +214,31 @@ def aplicar_estilo(root):
     # el de la app, para que la hoja blanca se despegue como en un lector de
     # PDF y no se mezcle con el resto de la ventana.
     s.configure("Visor.TFrame", background=FONDO_VISOR)
-    s.configure("Visor.TLabel", background=FONDO_VISOR, foreground="#d8dce2")
+    s.configure("Visor.TLabel", background=FONDO_VISOR, foreground=ACC)
     s.configure("Card.TLabelframe", background=CARD, bordercolor=SUP,
                 relief="solid", borderwidth=1, padding=6)
     s.configure("Card.TLabelframe.Label", background=CARD, foreground=ACC,
                 font=("Segoe UI", 10, "bold"))
-    s.configure("TEntry", fieldbackground="#ffffff", bordercolor=SUP,
+    s.configure("TEntry", fieldbackground="#ffffff", bordercolor=BORDE,
                 insertcolor=TXT, padding=4,
                 font=(FAM_UI, 10))
+    # el foco va en azul marino: el ámbar sobre blanco da 1.9:1 y no se ve
     s.map("TEntry", bordercolor=[("focus", ACC)])
     s.configure("Accent.TButton", background=ACC, foreground="#ffffff",
                 padding=[14, 8], font=("Segoe UI", 10, "bold"), bordercolor=ACC)
     s.map("Accent.TButton", background=[("active", ACC_D), ("pressed", ACC_D)],
           foreground=[("active", "#ffffff")])
-    s.configure("Ghost.TButton", background="#e5e9f4", foreground=TXT,
-                padding=[10, 3], font=("Segoe UI", 10), bordercolor="#d8deeb")
-    s.map("Ghost.TButton", background=[("active", "#d6dded")])
+    s.configure("Ghost.TButton", background=CREMA, foreground=TXT,
+                padding=[10, 3], font=("Segoe UI", 10), bordercolor=CREMA)
+    s.map("Ghost.TButton", background=[("active", AMBAR)])
+    s.configure("Res.TButton", background=AMBAR, foreground=NEGRO,
+                padding=[10, 3], font=("Segoe UI", 10, "bold"),
+                bordercolor=AMBAR)
+    s.map("Res.TButton", background=[("active", CREMA)])
     s.configure("Ejemplo.TCombobox", fieldbackground="#ffffff",
                 background="#ffffff", foreground=TXT, arrowcolor=ACC,
-                bordercolor=SUP, lightcolor=BG, darkcolor=BG, relief="flat",
-                padding=[6, 5], insertcolor=TXT, selectbackground="#ffffff",
+                bordercolor=BORDE, lightcolor=BG, darkcolor=BG, relief="flat",
+                padding=[6, 5], insertcolor=TXT, selectbackground=CREMA,
                 selectforeground=TXT, font=(FAM_UI, 10))
     s.map("Ejemplo.TCombobox",
           fieldbackground=[("readonly", "#ffffff"), ("focus", "#ffffff")],
@@ -203,14 +247,14 @@ def aplicar_estilo(root):
           lightcolor=[("focus", BG)], darkcolor=[("focus", BG)])
     root.option_add("*TCombobox*Listbox.background", "#ffffff")
     root.option_add("*TCombobox*Listbox.foreground", TXT)
-    root.option_add("*TCombobox*Listbox.selectBackground", "#dfe6f2")
+    root.option_add("*TCombobox*Listbox.selectBackground", CREMA)
     root.option_add("*TCombobox*Listbox.selectForeground", TXT)
     root.option_add("*TCombobox*Listbox.font", (FAM_UI, 10))
     s.configure("Key.TLabel", background=CARD, foreground=MUT,
                 font=(FAM_UI, 9))
     s.configure("Val.TLabel", background=CARD, foreground=TXT,
                 font=(FAM_UI, 10))
-    s.configure("Res.TLabel", background=CARD, foreground=TXT,
+    s.configure("Res.TLabel", background=CARD, foreground=ACC,
                 font=(FAM_UI, 12, "bold"))
     s.configure("Nota.TLabel", background=CARD, foreground=MUT,
                 font=(FAM_UI, 8))
@@ -221,14 +265,26 @@ def aplicar_estilo(root):
 
 
 class _ThumbScroll(tk.Canvas):
-    """Deslizador fino y moderno: asa redondeada que se resalta al pasar el mouse.
+    """Deslizador fino: un plano claro con un pulgar redondeado que se
+    resalta al pasar el mouse.
 
-    Se oculta solo cuando el contenido cabe en la vista."""
+    Con `horizontal=True` es la variante tumbada, con el mismo aspecto que la
+    vertical. Se oculta solo cuando el contenido cabe en la vista.
+
+    Los colores salen de la paleta: pulgar en azul marino sobre plano gris
+    claro, 9.2:1 de contraste entre ambos.
+    """
     ANCHO = 14
+    GROSOR = 8          # grosor del pulgar
+    PLANO = 4           # grosor de la guía
 
-    def __init__(self, master, command):
-        super().__init__(master, width=self.ANCHO, bg=BG, highlightthickness=0,
-                         bd=0, cursor="hand2")
+    def __init__(self, master, command, horizontal=False, bg=None):
+        self._horizontal = horizontal
+        alto = 14 if horizontal else None
+        ancho = None if horizontal else self.ANCHO
+        super().__init__(master, width=ancho, height=alto,
+                         bg=bg or BG, highlightthickness=0, bd=0,
+                         cursor="hand2")
         self._cmd = command
         self._first = 0.0
         self._last = 1.0
@@ -239,103 +295,231 @@ class _ThumbScroll(tk.Canvas):
         self.bind("<Button-1>", self._clic)
         self.bind("<B1-Motion>", self._mover)
         self.bind("<ButtonRelease-1>", self._soltar)
-        self.bind("<Enter>", lambda e: (setattr(self, "_hover", True), self._dibujar()))
-        self.bind("<Leave>", lambda e: (setattr(self, "_hover", False), self._dibujar()))
+        self.bind("<Enter>", lambda e: (setattr(self, "_hover", True),
+                                        self._dibujar()))
+        self.bind("<Leave>", lambda e: (setattr(self, "_hover", False),
+                                        self._dibujar()))
 
     def set(self, first, last):
         self._first = float(first)
         self._last = float(last)
         self._dibujar()
 
+    def _medida(self):
+        return self.winfo_width() if self._horizontal else self.winfo_height()
+
+    def _pos(self, v):
+        return v * self._medida()
+
     def _rango(self):
-        h = self.winfo_height()
-        if h < 24:
+        largo = self._medida()
+        minimo = 24 if self._horizontal else 24
+        if largo < minimo:
             return None
         total = self._last - self._first
         if total <= 0.0001 or total >= 1.0:
             return None
-        y0 = self._first * h
-        y1 = self._last * h
-        if y1 - y0 < 32:
-            y1 = y0 + 32
-            if y1 > h - 2:
-                y0 = max(2, h - 34)
-                y1 = h - 2
-        return max(2, y0), min(h - 2, y1)
+        a = self._pos(self._first)
+        b = self._pos(self._last)
+        if b - a < 32:
+            b = a + 32
+            if b > largo - 2:
+                a = max(2, largo - 34)
+                b = largo - 2
+        return max(2, a), min(largo - 2, b)
 
     def _dibujar(self, *_):
         self.delete("all")
         r = self._rango()
         if r is None:
             return
-        y0, y1 = r
-        color = "#374151" if self._hover else "#6b7280"
-        cx = self.ANCHO // 2
-        self.create_line(cx, 0, cx, self.winfo_height(), fill="#dde1e6", width=4)
-        self.create_line(cx, y0 + 5, cx, y1 - 5, fill=color, width=8,
-                         capstyle="round")
+        a, b = r
+        color = ACC_D if self._hover else PULGAR
+        if self._horizontal:
+            cy = self.winfo_height() // 2
+            self.create_line(0, cy, self.winfo_width(), cy,
+                             fill=PLANO_BARRA, width=self.PLANO)
+            self.create_line(a + 5, cy, b - 5, cy, fill=color,
+                             width=self.GROSOR, capstyle="round")
+        else:
+            cx = self.ANCHO // 2
+            self.create_line(cx, 0, cx, self.winfo_height(),
+                             fill=PLANO_BARRA, width=self.PLANO)
+            self.create_line(cx, a + 5, cx, b - 5, fill=color,
+                             width=self.GROSOR, capstyle="round")
 
     def _clic(self, e):
         r = self._rango()
         if r is None:
             return
-        y0, y1 = r
-        if e.y < y0:
+        a, b = r
+        p = e.x if self._horizontal else e.y
+        if p < a:
             self._cmd("scroll", -1, "pages")
-        elif e.y > y1:
+        elif p > b:
             self._cmd("scroll", 1, "pages")
         else:
             self._dragging = True
-            self._arrastre = e.y - y0
+            self._arrastre = p - a
 
     def _mover(self, e):
         if not self._dragging:
             return
-        h = self.winfo_height()
-        if h <= 0:
+        largo = self._medida()
+        if largo <= 0:
             return
-        frac = (e.y - self._arrastre) / h
-        self._cmd("moveto", max(0.0, min(1.0, frac)))
+        p = (e.x if self._horizontal else e.y) - self._arrastre
+        self._cmd("moveto", max(0.0, min(1.0, p / largo)))
 
     def _soltar(self, _):
         self._dragging = False
         self._dibujar()
 
 
-class ScrollableFrame(ttk.Frame):
-    """Marca de contenido con scroll vertical (deslizador fino).
+class ZoomSlider(tk.Canvas):
+    """Deslizador de un valor dentro de un rango, con el mismo aire que los
+    deslizadores de scroll: vía gris clara y tirador azul marino.
 
-    Con `horizontal=True` añade además barra horizontal y deja de forzar el
-    ancho del contenido, que es lo que permite ampliar un documento y
-    recorrerlo de lado a lado. Es lo que necesita el visualizador del
-    reporte: al ampliar, la hoja es más ancha que el panel.
+    Se hizo propio porque `ttk.Scale` con el tema clam pinta el tirador como
+    una línea de 1 px del color del tema y el clásico de Tk usa `bg` para el
+    tirador, así que ninguno deja poner el azul de la paleta. Expone `get()` y
+    `set()` como un `ttk.Scale` para no cambiar el resto del código.
+    """
+    ANCHO_TIRADOR = 14
+
+    def __init__(self, master, from_=0, to=100, command=None, length=150,
+                 bg=None, width=None, **kw):
+        alto = 24
+        super().__init__(master, width=length or 150, height=alto,
+                         bg=bg or BG, highlightthickness=0, bd=0,
+                         cursor="hand2", **kw)
+        self._min = float(from_)
+        self._max = float(to)
+        self._valor = self._min
+        self._cmd = command
+        self._arrastrando = False
+        self._hover = False
+        self._cuerpo = 10
+        self._margen = self.ANCHO_TIRADOR // 2
+        self.bind("<Configure>", lambda e: self._dibujar())
+        self.bind("<Button-1>", self._clic)
+        self.bind("<B1-Motion>", self._mover)
+        self.bind("<ButtonRelease-1>", lambda e: self._soltar(e))
+        self.bind("<Enter>", lambda e: self._cambiar_hover(True))
+        self.bind("<Leave>", lambda e: self._cambiar_hover(False))
+
+    # ---- valor ----
+    def get(self):
+        return self._valor
+
+    def set(self, v):
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return
+        self._valor = max(self._min, min(self._max, v))
+        self._dibujar()
+
+    # ---- dibujo ----
+    def _x_del_valor(self, v):
+        span = self._max - self._min
+        util = max(1, self.winfo_width() - self._margen * 2)
+        frac = 0.0 if span <= 0 else (v - self._min) / span
+        return self._margen + frac * util
+
+    def _dibujar(self, *_):
+        self.delete("all")
+        w = self.winfo_width()
+        if w <= 1:
+            return
+        cy = self.winfo_height() // 2
+        x0, x1 = self._margen, w - self._margen
+        color = ACC_D if self._hover else PULGAR
+        self.create_line(x0, cy, x1, cy, fill=PLANO_BARRA, width=4,
+                         capstyle="round")
+        x = self._x_del_valor(self._valor)
+        self.create_line(x0, cy, x, cy, fill=color, width=4, capstyle="round")
+        self.create_rectangle(x - 7, cy - self._cuerpo // 2,
+                              x + 7, cy + self._cuerpo // 2,
+                              fill=color, outline="")
+
+    def _cambiar_hover(self, v):
+        self._hover = bool(v)
+        self._dibujar()
+
+    # ---- interacción ----
+    def _valor_desde_x(self, x):
+        span = self._max - self._min
+        util = max(1, self.winfo_width() - self._margen * 2)
+        frac = (x - self._margen) / util
+        frac = max(0.0, min(1.0, frac))
+        return self._min + frac * span
+
+    def _clic(self, e):
+        self._arrastrando = True
+        v = self._valor_desde_x(e.x)
+        self.set(v)
+        self._avisar()
+
+    def _mover(self, e):
+        if not self._arrastrando:
+            return
+        v = self._valor_desde_x(e.x)
+        # solo avisa si el valor cambió de verdad: si no, el arrastre en la
+        # app se pondría a renderizar el PDF una y otra vez
+        if abs(v - self._valor) > 1e-9:
+            self.set(v)
+            self._avisar()
+
+    def _soltar(self, _e):
+        self._arrastrando = False
+
+    def _avisar(self):
+        if self._cmd is not None:
+            self._cmd(self._valor)
+
+
+class ScrollableFrame(ttk.Frame):
+    """Marca de contenido con scroll y deslizador fino.
+
+    Por defecto, vertical con el deslizador a la derecha. Con
+    `horizontal=True` el deslizador se pone ABAJO, tumbado y a todo el ancho,
+    y el contenido conserva su ancho propio, que es lo que permite ampliar un
+    documento y recorrerlo de lado a lado. Es lo que necesita el visualizador
+    del reporte; con `vertical_thumb=False` además se quita la franja del
+    deslizador vertical, que en ese panel tapaba lo que había detrás.
     """
 
-    def __init__(self, master, horizontal=False, bg=None, **kw):
+    def __init__(self, master, horizontal=False, vertical_thumb=True,
+                 bg=None, **kw):
         super().__init__(master, **kw)
         self._horizontal = horizontal
         self._bg = bg or BG
         self._canvas = tk.Canvas(self, bg=self._bg, highlightthickness=0,
                                  bd=0)
-        self._vsb = _ThumbScroll(self, self._canvas.yview)
-        self._canvas.configure(yscrollcommand=self._vsb.set)
-        self._canvas.pack(side="left", fill="both", expand=True)
-        self._vsb.pack(side="right", fill="y")
+        self._vsb = None
+        if not (horizontal and not vertical_thumb):
+            self._vsb = _ThumbScroll(self, self._canvas.yview, bg=self._bg)
+            self._canvas.configure(yscrollcommand=self._vsb.set)
+            self._canvas.pack(side="left", fill="both", expand=True)
+            self._vsb.pack(side="right", fill="y")
+        else:
+            self._canvas.pack(side="top", fill="both", expand=True)
+
         self._hsb = None
         if horizontal:
-            self._hsb = ttk.Scrollbar(self, orient="horizontal",
-                                      command=self._canvas.xview)
-            self._hsb.pack(side="bottom", fill="x")
+            self._hsb = _ThumbScroll(self, self._canvas.xview, horizontal=True,
+                                     bg=self._bg)
             self._canvas.configure(xscrollcommand=self._hsb.set)
+            self._hsb.pack(side="bottom", fill="x")
+
         self._inner = ttk.Frame(self._canvas, style="Visor.TFrame")
         self._win = self._canvas.create_window((0, 0), window=self._inner,
                                                anchor="nw")
         self._inner.bind("<Configure>",
-                         lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all")))
+                         lambda e: self._canvas.configure(
+                             scrollregion=self._canvas.bbox("all")))
         if horizontal:
-            # con barra horizontal el contenido conserva su ancho propio
-            self._inner.bind("<Configure>",
-                             lambda e: self._canvas.configure(scrollregion=self._canvas.bbox("all")))
             self._canvas.bind("<Configure>", self._ajustar_h)
         else:
             self._canvas.bind("<Configure>",

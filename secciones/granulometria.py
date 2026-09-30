@@ -13,8 +13,8 @@ lavado (w2) = w1 − retenido en el fondo.
 import math
 import tkinter as tk
 
-from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, ToolTip,
-                      FAM_UI, validar_tecla, ayuda_seccion)
+from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, AMBAR,
+                      NEGRO, ToolTip, FAM_UI, validar_tecla, ayuda_seccion)
 from motor.calculo import fnum
 
 SIEVES = [
@@ -163,9 +163,15 @@ class Granulometria(Seccion):
         self._build_cuerpo()
         self._bind_navegacion()
 
-        self.aviso_lbl = tk.Label(self, text="", foreground="#a0432e",
-                                  bg=CARD, font=(FAM_UI, 9, "bold"))
+        # Chip de aviso: ambar de la paleta con texto negro encima
+        # (10.1:1). Antes era un rojo oscuro sobre blanco; el ambar se ve
+        # desde lejos y avisa sin gritar.
+        self.aviso_lbl = tk.Label(self, text="", foreground=NEGRO,
+                                  bg=AMBAR, font=(FAM_UI, 9, "bold"),
+                                  padx=6, pady=1)
         self.aviso_lbl.grid(row=2, column=0, sticky="e", padx=2, pady=(6, 0))
+        # sin texto no se muestra: el chip vacio era un cuadro ambar suelto
+        self.aviso_lbl.grid_remove()
         self._aviso_tip = ToolTip(self.aviso_lbl, "")
 
         self.columnconfigure(0, weight=1)

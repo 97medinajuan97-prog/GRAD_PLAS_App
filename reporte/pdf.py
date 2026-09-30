@@ -1527,8 +1527,11 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     # un renglón horizontal que solo cruza las celdas de grava y arena (las
     # limos y arcillas no tienen subdivisión). Los textos se centran vertical y
     # horizontalmente en su celda con `ty_bas`. Los bordes laterales de la banda
-    # y los separadores verticales se dibujan cerrando cada celda.
+    # y los separadores verticales se dibujan cerrando cada celda, desde
+    # `yb` (el borde inferior de la banda, por encima del aire SEP_HDR) y no
+    # desde `py1`, para que ninguna línea llegue hasta el marco de la curva.
     yMid = top - 0.5 * H_HDR            # separador horizontal fila1/fila2
+    yb = py1 + SEP_HDR                   # borde INFERIOR de la banda de etiquetas
     c.setStrokeColor(CL_NEGRO)
     c.setLineWidth(0.5)
     # separador horizontal entre las dos filas (solo sobre grava y arena)
@@ -1536,14 +1539,14 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     # borde superior de la banda de etiquetas (tabla de tamaños de partícula)
     c.line(px0, top, px1, top)
     # laterales exteriores de la banda de etiquetas (plena altura)
-    c.line(px0, py1, px0, top)
-    c.line(px1, py1, px1, top)
+    c.line(px0, yb, px0, top)
+    c.line(px1, yb, px1, top)
     # verticales a plena altura: límites que separan fila1 (4.75 y 0.075)
     for lim in (4.75, 0.075):
-        c.line(XLOG(lim), py1, XLOG(lim), top)
+        c.line(XLOG(lim), yb, XLOG(lim), top)
     # verticales solo en la fila inferior: subdivisiones de la arena y grava
     for lim in (19.0, 2.0, 0.425):
-        c.line(XLOG(lim), py1, XLOG(lim), yMid)
+        c.line(XLOG(lim), yb, XLOG(lim), yMid)
     # textos fila 1 (negrilla, centrada en cada celda)
     c.setFillColor(CL_NEGRO)
     c.setFont(fnb, 5.2)
