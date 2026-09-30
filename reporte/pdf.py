@@ -308,7 +308,7 @@ _LABEL_IDENT = {
     "fecha_ejecucion": "Fecha de ejecución",
     "sondeo": "Perforación N°",
     "profundidad": "Profundidad (m)",
-    "descripcion": "Descripción material",
+    "descripcion": "Color",
 }
 
 
@@ -340,18 +340,28 @@ def _id_campo(datos, ident, key):
 
 
 def _desc_material(datos, res, ident):
-    """Descripción material del reporte.
+    """Descripción del material en el reporte.
 
-    Antepone el texto libre del usuario y, si no está ya, le sigue la frase
-    descriptiva que deriva de la clasificación SUCs (`descripcion_sucs`), que
-    characterize el suelo sin repetir porcentajes ni coeficientes.
+    La parte descriptiva la compone sola la app a partir de la clasificación
+    SUCs (`descripcion_sucs`): es la que caracteriza el suelo sin repetir
+    porcentajes ni coeficientes. El campo que ingresa el usuario es el COLOR,
+    que es lo único que el laboratorio observa y la clasificación no puede
+    deducir, así que se añade al final:
+
+        "Arcillas de plasticidad alta, de color café oscuro con vetas grises"
+
+    Si no hay color, se imprime solo la descripción automática.
     """
     from motor.clasificacion import descripcion_sucs
-    txt = (_id_campo(datos, ident, "descripcion") or "").strip()
+    color = (_id_campo(datos, ident, "descripcion") or "").strip()
+    color = color.strip(" .;,")
     auto = descripcion_sucs(res) if isinstance(res, dict) else ""
-    if auto and _normalizar(auto) not in _normalizar(txt):
-        txt = (txt + " " + auto).strip() if txt else auto
-    return txt
+    if color:
+        # `descripcion_sucs` ya cierra con punto; se quita para poder encadenar
+        # la coma sin dejar "areno-gravosas., de color ...".
+        auto = auto.rstrip(" .;,")
+        return "%s, de color %s" % (auto, color) if auto else "De color %s" % color
+    return auto
 
 
 def _profundidad(datos, ident):

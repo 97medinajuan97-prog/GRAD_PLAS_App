@@ -197,9 +197,12 @@ class App(tk.Tk):
             wdg.bind("<Up>", lambda ev, i=idx: self._ident_mov(i, -1))
             self.ident_ents.append(wdg)
 
-        # ---------------- descripción material (texto largo) ----------------
+        # ---------------- color del material (texto corto) ----------------
+        # La descripción del material la compone sola el reporte a partir de
+        # la clasificación SUCs, así que aquí solo se registra el color, que
+        # es lo único que el laboratorio observa y la app no puede deducir.
         i += 1
-        tk.Label(f, text="Descripción material", bg=CARD, fg=TXT,
+        tk.Label(f, text="Color", bg=CARD, fg=TXT,
                  font=(FAM_UI, 10)).grid(row=i, column=0, sticky="ne",
                                             padx=(2, 6), pady=2)
         dfrm = tk.Frame(f, bg=CARD, highlightbackground=SUP, highlightthickness=1)
@@ -229,9 +232,12 @@ class App(tk.Tk):
             "en formato DD/MM/AAAA. También se puede elegir con el calendario.",
             "Profundidad (m): rango de profundidad del muestreo (a): inicio, "
             "b): fin. Permite N.A. (no aplica).",
-            "Descripción material: texto libre con la descripción visual del "
-            "suelo; crece solo hacia abajo. En 'Cargar ejemplo' se completa "
-            "automáticamente a partir de los resultados.")))
+            "Color: color del suelo tal como se observa en campo, por ejemplo "
+            "'café oscuro con vetas grises'. El reporte lo añade al final de "
+            "la descripción que se deriva de la clasificación SUCs, de modo "
+            "que el texto completo queda como 'Arcillas de plasticidad alta, "
+            "de color café oscuro con vetas grises'. Si se deja vacío, se "
+            "imprime solo la descripción automática.")))
 
     def _entry_ident(self, parent, var, tip, width=22):
         """Crea un campo de entrada validado según el tipo de dato."""
@@ -521,9 +527,9 @@ class App(tk.Tk):
                 out.append("Profundidad (m): N.A.")
             else:
                 out.append("Profundidad (m): %s m" % vals[0])
-        desc = self.ident_desc.get("1.0", "end").strip()
-        if desc:
-            out.append("Descripción material: %s" % desc)
+        color = self.ident_desc.get("1.0", "end").strip()
+        if color:
+            out.append("Color: %s" % color)
         return out
 
     # ---------------- actualizacion en vivo ----------------

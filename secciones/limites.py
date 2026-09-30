@@ -88,6 +88,14 @@ class Limites(Seccion):
         cuerpo = tk.Frame(self, bg=CARD)
         cuerpo.grid(row=1, column=0, sticky="ew")
 
+        # Grilla ÚNICA de ingreso: las 3 filas del límite líquido seguidas de
+        # las 2 del límite plástico. Antes cada tabla reiniciaba la lista y la
+        # segunda borraba las filas de la primera, con tres efectos: la
+        # navegación con flechas no llegaba al límite líquido, la casilla "no
+        # plástico" solo deshabilitaba el plástico, y bajar desde la última
+        # fila lanzaba IndexError.
+        self._inputs = []
+
         for texto in ("Límite líquido", "Límite plástico"):
             tk.Label(cuerpo, text=texto, bg=CARD, fg=ACC,
                      font=(FAM_UI, 9, "bold")).pack(anchor="w",
@@ -107,7 +115,6 @@ class Limites(Seccion):
 
     def _tabla_ll(self, parent):
         keys = ("id", "n", "recip", "hum", "seco")
-        self._inputs = []
         for c, clave in enumerate(keys):
             texto = "N° recip" if clave == "id" else self._sigla(clave)
             self._col_cabecera(parent, c, texto, self.Sig[clave], negra=True,
@@ -136,7 +143,6 @@ class Limites(Seccion):
 
     def _tabla_lp(self, parent):
         keys = ("id", "recip", "hum", "seco")
-        self._inputs = []
         for c, clave in enumerate(keys):
             texto = "N° recip" if clave == "id" else self._sigla(clave)
             self._col_cabecera(parent, c, texto, self.Sig[clave], negra=True,
@@ -257,25 +263,43 @@ class Limites(Seccion):
                 num.bind("<Return>", lambda ev, r=r, c=c: self._return(r, c))
 
     def _ncols(self, r):
-        return 5 if r < 3 else 4
+        """Columnas de ingreso de la fila `r`: 5 en el líquido (id, N° golpes,
+        Wc, W1, W2) y 4 en el plástico (id, Wc, W1, W2)."""
+        return len(self._inputs[r]) if 0 <= r < len(self._inputs) else 0
 
-    def _nav(self, r, c, dr, dc):
-        nr = max(0, min(r + dr, 4))
-        nc = max(0, min(c + dc, self._ncols(nr) - 1))
-        num = self._inputs[nr][nc]
+    def _enfocar(self, r, c):
+        """Mueve el foco a la celda (r, c) si existe; devuelve si pudo."""
+        if not (0 <= r < len(self._inputs)):
+            return False
+        fila = self._inputs[r]
+        if not (0 <= c < len(fila)):
+            return False
+        num = fila[c]
         num.focus_set()
         self._seleccionar(num)
+        return True
+
+    def _nav(self, r, c, dr, dc):
+        """Mueve el foco una celda. En el borde se queda donde está; al
+        cambiar de fila ajusta la columna a lo que esa fila tenga, porque el
+        límite plástico tiene una columna menos que el líquido."""
+        if not self._enfocar(r, c):
+            return
+        if not dr:                                   # horizontal: no sale de la fila
+            self._enfocar(r, min(max(c + dc, 0), self._ncols(r) - 1))
+            return
+        nr = min(max(r + dr, 0), len(self._inputs) - 1)
+        self._enfocar(nr, min(c, self._ncols(nr) - 1))
 
     def _return(self, r, c):
+        """Enter avanza a la celda siguiente y da la vuelta al terminar."""
         if c + 1 < self._ncols(r):
             nr, nc = r, c + 1
-        elif r < 4:
+        elif r + 1 < len(self._inputs):
             nr, nc = r + 1, 0
         else:
             nr, nc = 0, 0
-        num = self._inputs[nr][nc]
-        num.focus_set()
-        self._seleccionar(num)
+        self._enfocar(nr, nc)
 
     def _seleccionar(self, wdg):
         """Estilo Excel: borde resaltado y sin cursor titilando. Al escribir

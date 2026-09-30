@@ -4,9 +4,12 @@
 Cada entrada equivale a una muestra de laboratorio completa y verosímil que,
 al calcularse, produce una de las clasificaciones SUCs posibles. Al pulsar
 "Cargar ejemplo" se elige una al azar (con identificación también aleatoria),
-o una del símbolo SUCs seleccionado, de modo que los datos numéricos y la
-descripción de la muestra siempre coinciden con la clasificación que
-generan.
+o una del símbolo SUCs seleccionado, de modo que los datos numéricos siempre
+coincidan con la clasificación que generan.
+
+El campo de descripción aporta solo el COLOR observado en campo. La parte
+descriptiva de la muestra la compone el reporte a partir del símbolo SUCs, y
+los dos textos se unen como "<descripción SUCs>, de color <color>".
 
 REALISMO DEL TAMIZADO
 ---------------------
@@ -154,17 +157,45 @@ def _pesos(p, Ws):
 
 
 def _composicion(p, Ws, LL, IP, np_):
+    """Composición del material, calculada con el motor real.
+
+    Se usa para elegir un color verosímil según el tipo de suelo y para
+    comprobar que el ejemplo es coherente consigo mismo. La descripción que
+    llega al reporte la arma el PDF, no este módulo.
+    """
     pesos = _pesos(p, Ws)
     g = calcular_granulometria({"total": Ws, "pesos": pesos})
     sucs, _desc = clasificar(g["f200"], g["grava"], g["arena"], g["cu"],
                              g["cc"], LL, IP, np_=np_)
-    # `_desc` no se propaga: la descripción del material se arma aparte con
-    # `descripcion_sucs` (ver `_descripcion`), que es la que llega al PDF.
     return {
         "sucs": sucs, "tipo": g["tipo"],
         "grava": g["grava"], "arena": g["arena"], "finos": g["f200"],
         "cu": g["cu"], "cc": g["cc"],
     }
+
+
+# Colores de campo observados en suelos, separados por tipo. El reporte
+# arma la descripción completa como "<descripción SUCs>, de color <color>",
+# así que el ejemplo debe aportar solo la parte del color.
+COLORES_GRANULAR = (
+    "grisáceo", "gris medio", "café claro", "marrón rojizo",
+    "café con vetas grises", "beige con manchas oscuras",
+)
+COLORES_FINO = (
+    "café oscuro", "café rojizo", "marrón grisáceo con vetas claras",
+    "gris claro", "amarillento", "café oscuro con vetas grises",
+)
+
+
+def _color(comp):
+    """Color verosímil para el material de la muestra, según su tipo.
+
+    Un suelo fino (arcilla o limo) se ve distinto de uno granular: el limo y
+    la arcilla suelen presentar tonos cálidos y uniformes, mientras que la
+    arena y la grava se ven más grises y con varianzas de grano.
+    """
+    paleta = COLORES_FINO if comp.get("tipo") == "FINO" else COLORES_GRANULAR
+    return _RNG.choice(paleta)
 
 
 # Variantes de (golpes, desfase) para el ensayo de límite líquido: cada LL del
@@ -207,14 +238,6 @@ def _fecha(base, det):
     return "%02d/%02d/%d" % (d.day, d.month, d.year)
 
 
-def _descripcion(comp, ll_np):
-    from motor.clasificacion import descripcion_sucs
-    return descripcion_sucs({
-        "sucs": comp["sucs"], "g_grava": comp["grava"],
-        "g_arena": comp["arena"], "ll_np": ll_np,
-    })
-
-
 def _construir(entrada):
     sucs, w_nat, Ws, recip, LL, IP, np_, p = entrada
     pesos = _pesos(p, Ws)
@@ -235,7 +258,7 @@ def _construir(entrada):
         "fecha_ejecucion": _fecha(base, _RNG.randint(45, 80)),
         "prof_desde": "%.2f" % desde,
         "prof_hasta": "%.2f" % hasta,
-        "descripcion": _descripcion(comp, np_),
+        "descripcion": _color(comp),
     }
 
     return {
