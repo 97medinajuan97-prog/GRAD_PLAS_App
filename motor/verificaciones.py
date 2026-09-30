@@ -56,12 +56,17 @@ def verificaciones(data, res, g):
         chk.append((8, "Cu ≥ 1", None, None))
 
     F200 = g["f200"]
-    if F200 is not None:
-        ok9 = F200 < 10
-        chk.append((9, "D10 interpolable (%Pasa N°200 < 10)", ok9,
-                    "%Pasa N°200 ≥ 10% → D10 NO interpolable" if not ok9 else None))
+    # Que el D10 sea o no interpolable depende del suelo, no de un error en
+    # la captura: en un suelo fino el % que pasa el N°200 es alto por
+    # definición y el D10 simplemente no existe. Marcarlo como "falló"
+    # reprobaría un ensayo correcto, así que sin D10 no hay nada que
+    # verificar y el estado es None.
+    if F200 is not None and res["D10"] is not None:
+        chk.append((9, "D10 obtenido por interpolación", True, None))
     else:
-        chk.append((9, "D10 interpolable (%Pasa N°200 < 10)", None, None))
+        chk.append((9, "D10 obtenido por interpolación", None,
+                    "%Pasa N°200 ≥ 10% → el D10 no es interpolable"
+                    if F200 is not None else None))
 
     pesos = [w for w in data["grano"]["pesos"] if w is not None]
     neg = [w for w in pesos if w < 0]

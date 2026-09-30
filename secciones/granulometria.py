@@ -96,8 +96,18 @@ def aviso_incoherencia(pesos, total):
         return "", ""
     if any(p < 0 for p in no):
         return "⚠ Datos incoherentes", "Los pesos retenidos no pueden ser negativos."
-    if len(no) < len(pesos):
-        return "⚠ Datos incompletos", "Falta el peso retenido de algún tamiz."
+    # Un tamiz en blanco NO es por sí solo un error. En INV E-123 el tamizado
+    # arranca donde el material lo exige: una arcilla no se monta desde 3",
+    # se lavan los finos y solo se pesan N°4, N°10, N°40 y N°200. Los
+    # tamices en blanco por encima del primero pesado son lo normal.
+    # Lo sospechoso es un hueco ENTRE dos tamices ya pesados: ahí sí faltó
+    # anotar algo.
+    idx = [i for i, p in enumerate(pesos) if p is not None]
+    huecos = [i for i in range(idx[0], idx[-1] + 1) if pesos[i] is None]
+    if huecos:
+        nombres = ", ".join(SIEVES[i][0] for i in huecos)
+        return "⚠ Datos incompletos", ("Falta el peso retenido de %s: hay un "
+                                       "hueco entre tamices ya pesados." % nombres)
     s = sum(no)
     if total is not None and s > total:
         return "⚠ Datos incoherentes", ("La suma de retenidos (%.1f g) supera "

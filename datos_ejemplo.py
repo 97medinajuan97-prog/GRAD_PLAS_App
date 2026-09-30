@@ -1,13 +1,35 @@
 # -*- coding: utf-8 -*-
 """Banco de ejemplos coherentes de "Cargar ejemplo".
 
-Cada entrada equivale a una muestra de laboratorio completa y realista que,
-al calcularse, produce una de las clasificaciones SUCs posibles. Los perfiles
-de pasa (%) son monótonos (sin pesos negativos) y grava+arena+finos suman
-100 %. Al pulsar "Cargar ejemplo" se elige una al azar (con identificación
-también aleatoria), o una del símbolo SUCs seleccionado, de modo que los
-datos numéricos y la descripción de la muestra siempre coinciden con la
-clasificación que generan.
+Cada entrada equivale a una muestra de laboratorio completa y verosímil que,
+al calcularse, produce una de las clasificaciones SUCs posibles. Al pulsar
+"Cargar ejemplo" se elige una al azar (con identificación también aleatoria),
+o una del símbolo SUCs seleccionado, de modo que los datos numéricos y la
+descripción de la muestra siempre coinciden con la clasificación que
+generan.
+
+REALISMO DEL TAMIZADO
+---------------------
+Los ejemplos no anesthesian los once tamices. En el laboratorio el tamizado
+depende del material:
+
+  * Arcillas y limos (CL, CH, ML, MH): no se monta la pila desde 3". Se
+    pesa la muestra, se lavan los finos y solo se pesan N°4, N°10, N°40
+    y N°200. Los tamices gruesos van EN BLANCO.
+  * Arenas: tampoco hay nada mayor que 1", así que 3" a 1" quedan en blanco
+    y el tamizado arranca en 3/4" o en N°4.
+  * Gravas: se usa la pila completa, pero los tamices finos suelen quedar en
+    blanco cuando el suelo es limpio (casi todo pasa el N°200 al fondo).
+
+Un tamiz en blanco se anota con 100.0 de % que pasa en el perfil: su
+retenido es cero y `_pesos` lo traduce a un peso en blanco, no a 0.0. Lo
+mismo ocurre con un tamiz cuyo retenido cae por debajo de la resolución de
+la balanza.
+
+Los perfiles se afinaron numéricamente contra el motor real de la app
+(`secciones.granulometria` + `motor.clasificacion`) para que cada fila dé
+exactamente el símbolo que anuncia y una curva verosímil, sin saltos
+improbables ni toda la fracción gruesa acumulada en un solo tamiz.
 """
 import datetime
 import math
@@ -17,6 +39,9 @@ from secciones.granulometria import calcular_granulometria
 from motor.clasificacion import clasificar
 
 _RNG = random.Random()
+
+#: Resolución de la balanza del ensayo (INV E-123 / ASTM D6913).
+BALANZA = 0.1
 
 PROYECTOS = [
     "CARACTERIZACION BASE GRANULAR VIA SAN JUAN",
@@ -34,55 +59,68 @@ ORDENADO = [
 ]
 
 # (símbolo, humedad natural % objetivo, Ws seco (g), Wc tara (g), LL, IP, NP)
-# La granulometría se describe con 11 pasos (% que pasa) decrecientes:
-# '3"' .. N° 4 .. N° 200. Suma grava+arena+finos = 100 %.
+# y los 11 pasos de % que pasa, de 3" a N°200. Los tamices que esa muestra
+# NO tamiza se anotan con 100.0 (retenido cero -> peso en blanco).
 BANCO = [
+    # --- gravas limpias: pila completa, apenas finos en el N°200 ---------
     ("GW",   5.5, 3000, 30.0, 30.0, 16.0, False,
-     [85.24, 84.37, 82.57, 76.07, 73.67, 67.18, 55.95, 35.78, 28.58, 9.59, 2.0]),
+     [85.2, 84.4, 82.6, 76.1, 73.7, 67.2, 55.9, 35.8, 13.5, 7.0, 1.5]),
     ("GP",   5.5, 3000, 30.0, 27.0, 16.0, False,
-     [92.66, 92.0, 84.73, 83.08, 72.59, 46.64, 44.01, 34.15, 27.45, 6.13, 2.0]),
+     [92.7, 92.0, 84.7, 83.1, 72.6, 46.6, 44.0, 34.2, 4.0, 2.0, 1.2]),
+
+    # --- arenas puras: nada mayor que 1" ---------------------------------
     ("SW",   8.0, 2000, 30.0, 32.0, 16.0, False,
-     [97.81, 97.64, 96.71, 94.69, 93.1, 88.04, 76.83, 71.75, 45.87, 16.68, 2.5]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 77.5, 28.5, 3.0]),
     ("SP",   8.0, 2000, 30.0, 36.0, 16.0, False,
-     [97.02, 95.91, 92.13, 91.11, 86.32, 78.13, 74.82, 55.56, 48.86, 21.15, 2.5]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 69.5, 59.0, 4.0]),
+
+    # --- grava con finos: pila completa, D10 interpolable (F200 6-8 %) ----
     ("GW-GM", 8.5, 3000, 30.0, 28.0, 5.0, False,
-     [87.1, 86.34, 83.56, 77.89, 71.47, 58.71, 50.82, 37.51, 32.02, 14.38, 8.0]),
+     [87.1, 86.3, 83.6, 77.9, 71.5, 58.7, 50.8, 37.5, 13.0, 10.0, 7.0]),
     ("GW-GC", 8.5, 3000, 30.0, 31.0, 16.0, False,
-     [91.84, 88.46, 79.04, 75.09, 71.35, 66.34, 61.09, 36.41, 31.86, 13.58, 8.0]),
+     [91.8, 88.5, 79.0, 75.1, 71.3, 66.3, 61.1, 36.4, 12.0, 6.5, 6.0]),
     ("GP-GM", 8.5, 3000, 30.0, 29.0, 5.0, False,
-     [86.71, 85.56, 84.91, 83.64, 75.36, 59.42, 56.61, 32.99, 26.97, 12.45, 8.0]),
+     [86.7, 85.6, 84.9, 83.6, 75.4, 59.4, 56.6, 33.0, 9.0, 8.5, 8.0]),
     ("GP-GC", 8.5, 3000, 30.0, 33.0, 16.0, False,
-     [84.98, 82.1, 74.23, 65.49, 59.02, 48.95, 36.28, 28.87, 25.82, 13.46, 8.0]),
+     [85.0, 82.1, 74.2, 65.5, 59.0, 49.0, 36.3, 28.9, 7.5, 7.0, 6.5]),
+
+    # --- arena con finos: 3" a 1" en blanco ------------------------------
     ("SW-SM", 10.0, 2000, 30.0, 27.0, 5.0, False,
-     [94.97, 94.71, 90.87, 89.88, 88.62, 85.17, 74.16, 56.72, 43.87, 15.61, 8.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 64.0, 11.5, 8.0]),
     ("SW-SC", 10.0, 2000, 30.0, 33.0, 16.0, False,
-     [96.53, 95.44, 93.6, 91.42, 87.63, 84.17, 79.68, 67.41, 47.51, 20.94, 8.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 54.0, 10.5, 9.0]),
     ("SP-SM", 10.0, 2000, 30.0, 28.0, 5.0, False,
-     [97.45, 95.94, 93.62, 93.19, 90.41, 84.74, 82.08, 68.21, 54.61, 40.22, 8.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 78.5, 58.0, 9.0]),
     ("SP-SC", 10.0, 2000, 30.0, 35.0, 16.0, False,
-     [91.72, 90.67, 89.79, 83.13, 76.35, 72.33, 70.87, 62.7, 55.91, 38.19, 8.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 76.0, 58.5, 9.5]),
+
+    # --- grava con finos, 12 < F200 < 50 (ya no hay D10) -----------------
     ("GM",  13.0, 1500, 30.0, 34.0, 9.0, False,
-     [94.83, 93.99, 90.86, 89.12, 86.75, 75.96, 64.35, 33.53, 33.26, 26.84, 24.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 88.0, 70.0, 36.0, 31.4, 25.9, 22.0]),
     ("GC",  13.0, 1500, 30.0, 32.0, 16.0, False,
-     [94.04, 91.68, 87.12, 84.32, 68.97, 66.87, 51.71, 38.35, 37.37, 31.55, 24.0]),
-    ("SM",  15.0, 1500, 30.0, 35.0, 9.0, False,
-     [99.0, 98.57, 97.25, 95.43, 91.3, 89.23, 85.43, 71.05, 44.63, 29.53, 24.0]),
-    ("SC",  15.0, 1500, 30.0, 33.0, 16.0, False,
-     [97.66, 95.74, 93.67, 92.06, 88.73, 78.39, 77.06, 65.29, 59.97, 40.59, 24.0]),
+     [100.0, 100.0, 100.0, 100.0, 92.0, 80.0, 66.0, 38.0, 33.4, 27.9, 24.0]),
     ("GM",  16.0, 1500, 30.0, 36.0, None, True,
-     [94.83, 93.99, 90.86, 89.12, 86.75, 75.96, 64.35, 33.53, 33.26, 26.84, 24.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 88.0, 70.0, 36.0, 31.4, 25.9, 22.0]),
+
+    # --- arena con finos, 12 < F200 < 50 ---------------------------------
+    ("SM",  15.0, 1500, 30.0, 35.0, 9.0, False,
+     [100.0, 100.0, 100.0, 100.0, 100.0, 94.0, 82.0, 63.0, 50.1, 34.9, 24.0]),
+    ("SC",  15.0, 1500, 30.0, 33.0, 16.0, False,
+     [100.0, 100.0, 100.0, 100.0, 100.0, 95.0, 84.0, 63.5, 51.1, 36.5, 26.0]),
     ("SM",  18.0, 1500, 30.0, 38.0, None, True,
-     [99.0, 98.57, 97.25, 95.43, 91.3, 89.23, 85.43, 71.05, 44.63, 29.53, 24.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 94.0, 82.0, 63.0, 50.1, 34.9, 24.0]),
+
+    # --- finos: 3" a 3/8" en blanco, solo N°4/N°10/N°40/N°200 ------------
     ("CL",  22.0, 1000, 30.0, 38.0, 16.0, False,
-     [99.07, 98.84, 97.94, 97.6, 96.94, 94.66, 91.65, 90.8, 83.88, 68.36, 60.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 80.0, 72.7, 64.2, 58.0]),
     ("CH",  32.0, 1000, 30.0, 55.0, 26.0, False,
-     [99.5, 99.06, 98.35, 97.27, 96.91, 95.38, 94.32, 89.8, 79.63, 64.23, 60.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 80.0, 74.1, 67.0, 62.0]),
     ("ML",  20.0, 1000, 30.0, 28.0, 5.0, False,
-     [98.82, 98.46, 97.0, 94.78, 91.95, 84.18, 81.83, 76.2, 75.3, 67.45, 60.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 80.0, 74.7, 68.5, 64.0]),
     ("MH",  34.0, 1000, 30.0, 58.0, 20.0, False,
-     [98.48, 98.17, 96.6, 93.4, 90.48, 88.59, 85.54, 81.85, 80.22, 70.95, 60.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 80.0, 72.1, 62.7, 56.0]),
     ("ML",  18.0, 1000, 30.0, 24.0, None, True,
-     [98.82, 98.46, 97.0, 94.78, 91.95, 84.18, 81.83, 76.2, 75.3, 67.45, 60.0]),
+     [100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 100.0, 80.0, 75.4, 69.9, 66.0]),
 ]
 
 # Símbolos SUCs posibles, en orden de aparición (para el selector).
@@ -94,14 +132,25 @@ SIMBOLOS = tuple(_SIMBOLOS)
 
 
 def _pesos(p, Ws):
-    """Convierte los pasos % (decrecientes) a pesos retenidos (g) por tamiz."""
-    ret = []
-    prev = 100.0
-    for i in range(10):
-        ret.append((prev - p[i]) / 100.0 * Ws)
-        prev = p[i]
-    ret.append((prev - p[10]) / 100.0 * Ws)
-    return [round(w, 1) for w in ret]
+    """Convierte los pasos % que pasa en pesos retenidos (g) por tamiz.
+
+    Un tamiz que no retiene nada se deja EN BLANCO, no como 0.0: así se ve en
+    el reporte igual que en el laboratorio, donde el tamiz vacío no se
+    anota. Pasa en dos casos:
+
+      * la muestra no tiene nada de ese tamaño (una arcilla no se tamiza
+        desde 3"; el perfil de esa fila trae 100.0 en esos tamices);
+      * el retenido cae por debajo de la resolución de la balanza.
+    """
+    ret, prev = [], 100.0
+    for paso in p:
+        ret.append((prev - paso) / 100.0 * Ws)
+        prev = paso
+    salida = []
+    for w in ret:
+        v = round(w, 1)
+        salida.append(None if v < BALANZA / 2.0 else v)
+    return salida
 
 
 def _composicion(p, Ws, LL, IP, np_):
