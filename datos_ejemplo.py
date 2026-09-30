@@ -38,7 +38,8 @@ import datetime
 import math
 import random
 
-from secciones.granulometria import calcular_granulometria
+from secciones.granulometria import (calcular_granulometria, N_TAMICES,
+                                     POS_1_2, DIAM)
 from motor.clasificacion import clasificar
 
 _RNG = random.Random()
@@ -134,6 +135,26 @@ for _e in BANCO:
 SIMBOLOS = tuple(_SIMBOLOS)
 
 
+#: El banco se escribe con los % que pasa de siempre, sin el 1/2" (12.70 mm)
+#: que ahora es tamiz del ensayo. Ese valor se interpola en `_con_paso_medio`.
+def _con_paso_medio(p):
+    """Inserta el % que pasa del 1/2" entre 3/4" y 3/8".
+
+    Va en escala logarítmica de diámetro, que es como se comporta de verdad
+    una curva granulométrica entre dos tamices. Si la lista ya trae el 1/2"
+    (12 valores) se respeta tal cual: el banco puede crecer sin romper esto.
+    """
+    import math
+    if len(p) != N_TAMICES - 1:
+        return list(p)
+    arriba, abajo = float(p[POS_1_2 - 1]), float(p[POS_1_2])   # 3/4" y 3/8"
+    d1, d2 = DIAM[POS_1_2 - 1], DIAM[POS_1_2]
+    t = math.log10(DIAM[POS_1_2])
+    frac = (t - math.log10(d1)) / (math.log10(d2) - math.log10(d1))
+    val = arriba + (abajo - arriba) * frac
+    return (list(p[:POS_1_2]) + [round(val, 2)] + list(p[POS_1_2:]))
+
+
 def _pesos(p, Ws):
     """Convierte los pasos % que pasa en pesos retenidos (g) por tamiz.
 
@@ -146,7 +167,7 @@ def _pesos(p, Ws):
       * el retenido cae por debajo de la resolución de la balanza.
     """
     ret, prev = [], 100.0
-    for paso in p:
+    for paso in _con_paso_medio(p):
         ret.append((prev - paso) / 100.0 * Ws)
         prev = paso
     salida = []

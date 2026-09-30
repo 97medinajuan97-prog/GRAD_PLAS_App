@@ -19,6 +19,11 @@ las firmas y el pie permanecen anclados al borde inferior.
 import os
 from collections import namedtuple
 
+# No se importa `secciones.granulometria` a propósito: ese módulo arrastra
+# tkinter y el reporte se genera también sin interfaz (servidor, pruebas). El
+# número de filas se comprueba contra los datos received al dibujar, en
+# `_bloque_gr`.
+
 _FONTS = {}
 
 # ---- página (hoja carta, pt) ----
@@ -35,7 +40,11 @@ _ROWH_WL = 12.5                     # alto de fila de la tabla de pesos/límites
 _ROWS_WL = 9                        # encabezado + 8 filas de datos
 _SECT_H_WL = _ROWS_WL * _ROWH_WL     # alto exacto de la sección wl-wp-block
 
-_GR_ROWS = 13                        # encabezado + 11 tamices + fondo
+#: encabezado + las filas de `SIEVES` (12 tamices + el fondo). Tiene que
+#: cuadrar con `secciones.granulometria.SIEVES`; si algún día cambia la lista,
+#: `_chequear_filas_gr` avisa al importar en vez de recortar la tabla en
+#: silencio o dejar filas vacías.
+_GR_ROWS = 14
 _GR_ROWH = _ROWH_WL                   # la tabla de granulometría usa el mismo alto de fila
 _GR_BAND_TOP = _GR_ROWS * _GR_ROWH    # alto de tabla + resultados
 # banda inferior de parámetros granulométricos (W1/W2, D60..D10, Cu/Cc, %):
@@ -1056,7 +1065,7 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
     HDR_SIZE = 6.6                            # títulos del encabezado de bloque
     PADX = 3.0                                # aire horizontal de las celdas
     f_tab = 0.70                              # la tabla ocupa el 70 % del ancho
-    ROWS = _GR_ROWS                           # 13: encabezado + 11 tamices + fondo
+    ROWS = _GR_ROWS                           # encabezado + tamices + fondo
     rh = _GR_ROWH                             # 12.5 pt, igual que límites
     NC = 6                                    # columnas de la tabla
 
@@ -1093,6 +1102,14 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
 
     # cuerpo: una fila por tamiz (+ fondo)
     sieve = res.get("sieve") or []
+    # La tabla tiene alto fijo: si llegar más filas de las que caben, se
+    # dibujaría la grilla encima de los textos. Se avisa en vez de fallar
+    # Callado, que es lo que pasaba cuando `_GR_ROWS` no cuadraba con SIEVES.
+    if len(sieve) + 1 > ROWS:
+        raise ValueError(
+            "La tabla de granulometría espera %d filas y llegaron %d. "
+            "Hay que actualizar _GR_ROWS en reporte/pdf.py."
+            % (ROWS - 1, len(sieve)))
     c.setFont(fn, TAB_SIZE)
     for i, s in enumerate(sieve, start=1):
         yb = hedr - i * rh                   # borde inferior de la fila
@@ -1538,6 +1555,11 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     c.line(px0, yMid, XLOG(0.075), yMid)
     # borde superior de la banda de etiquetas (tabla de tamaños de partícula)
     c.line(px0, top, px1, top)
+    # borde INFERIOR de la banda: faltaba, y sin él la tabla de denominaciones
+    # (GRAVA/ARENA/LIMO Y ARCILLA y sus subdivisiones) quedaba abierta por
+    # abajo, como si las celdas no cerraran. Se cierra a lo largo de todo el
+    # ancho, y las verticales internas nacen de ella.
+    c.line(px0, yb, px1, yb)
     # laterales exteriores de la banda de etiquetas (plena altura)
     c.line(px0, yb, px0, top)
     c.line(px1, yb, px1, top)

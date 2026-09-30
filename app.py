@@ -16,7 +16,7 @@ from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D,
 
 from secciones.humedad import Humedad
 from secciones.limites import Limites
-from secciones.granulometria import Granulometria
+from secciones.granulometria import Granulometria, N_TAMICES, POS_1_2
 from motor.calculo import calcular as motor_calcular, fnum
 from datos_ejemplo import datos_ejemplo, SIMBOLOS
 
@@ -130,7 +130,7 @@ class App(tk.Tk):
         ttk.Button(bar, text="Guardar PDF", style="Accent.TButton",
                    command=self._pdf).pack(side="right", padx=2)
         self._build_zoom(bar)
-        self._ajustar_zoom_inicial()
+        self._zoom_100()
         # espacio elástico entre el rótulo y el grupo de la derecha, para que
         # el grupo quede siempre pegado al borde sin apretar el control
         tk.Frame(bar, bg=FONDO_VISOR).pack(side="left", fill="x", expand=True)
@@ -200,6 +200,13 @@ class App(tk.Tk):
         menos.pack(side="right")
         ToolTip(menos, "Reducir la ampliación.")
 
+        encajar = tk.Button(parent, text="Encajar", font=(FAM_UI, 9),
+                            bg=FONDO_VISOR, fg=ACC, relief="flat", bd=0,
+                            padx=6, activebackground=CREMA, cursor="hand2",
+                            command=self._encajar_hoja)
+        encajar.pack(side="right", padx=(6, 2))
+        ToolTip(encajar, "Ajustar para que la hoja completa entre en el panel.")
+
     def _factor_zoom(self):
         """Factor de escala para el 100 % real de la hoja.
 
@@ -255,17 +262,12 @@ class App(tk.Tk):
         # un porcentaje escrito es absoluto: 150 % es el 150 %, no "150 más"
         self._zoom_ir(pct - 100.0)
 
-    def _ajustar_zoom_inicial(self):
-        """Arranca con la hoja completa a la vista, sin esperar al primer render.
-
-        El panel aún no tiene tamaño medido, así que se usa un ancho de
-        referencia; cuando la ventana se dimensiona, el primer render ya sale
-        con la medida buena.
-        """
-        self.after(60, self._encajar_hoja)
-
     def _encajar_hoja(self):
-        """Coloca el zoom en el valor que hace caber el alto de la hoja."""
+        """Coloca el zoom en el valor que hace caber el alto de la hoja.
+
+        Se dejó de usar al abrir, porque el visor arranca en el 100 % real,
+        pero sigue en el botón «Encajar» para ver la hoja completa de una vez.
+        """
         try:
             alto = self.right_sc.canvas_height() - 2 * self.PAD_HOJA
             ppp = float(self.winfo_fpixels("1i"))
@@ -276,6 +278,20 @@ class App(tk.Tk):
             pct = 100.0 * (alto / (11.0 * ppp))
             self._zoom_ir(max(self.ZOOM_MIN, min(self.ZOOM_MAX, pct - 100.0)))
             self._zoom_pct.set("%d %%" % round(pct))
+
+    def _zoom_100(self):
+        """Deja el control en el 100 %: la hoja a su tamaño real de impresión.
+
+        Antes el visor abría «encajado» para que la hoja completa entrara en el
+        panel. Se cambió a 100 % fijo, que es el tamaño real de la carta, y el
+        botón de encajar sigue disponible para cuando haga falta verlo entero.
+        """
+        self._zoom_ir(0)
+        self._zoom_pct.set("100 %")
+
+    #: ancho en caracteres de los dos botones de Muestra. Se fijan los dos al
+    #: mismo para que midan igual, ya que el texto más corto no los iguala.
+    ANCHO_BTN = 17
 
     def _build_muestra(self, parent):
         """Caja de la muestra: carpeta de trabajo, abrir y guardar.
@@ -289,13 +305,23 @@ class App(tk.Tk):
         f.pack(fill="x", pady=2)
 
         # --- acciones primero: son el uso principal de la sección ---
+        # `expand` + `anchor` para que los dos botones queden centrados en la
+        # caja, y el mismo `width` en ambos para que midan lo mismo: el texto
+        # más corto no los dejaba iguales.
         fila = ttk.Frame(f, style="Card.TFrame")
         fila.pack(fill="x")
-        ttk.Button(fila, text="Abrir muestra", style="Accent.TButton",
-                   command=self._abrir_muestra).pack(side="left",
-                                                     padx=(0, 6))
-        ttk.Button(fila, text="Guardar muestra", style="Ghost.TButton",
-                   command=self._guardar_muestra).pack(side="left")
+        # Un marco intermedio con `anchor="center"` es lo que centra de verdad:
+        # con `expand` en los botones, `pack` reparte el sobrante entre las
+        # zonas que ocupa cada uno, pero el botón sigue dibujándose a la
+        # izquierda de su zona y los dos quedaban arrimados al borde.
+        centro = ttk.Frame(fila, style="Card.TFrame")
+        centro.pack(anchor="center")
+        ttk.Button(centro, text="Abrir muestra", style="Accent.TButton",
+                   width=self.ANCHO_BTN, command=self._abrir_muestra
+                   ).pack(side="left", padx=(0, 8))
+        ttk.Button(centro, text="Guardar muestra", style="Ghost.TButton",
+                   width=self.ANCHO_BTN, command=self._guardar_muestra
+                   ).pack(side="left")
 
         # --- carpeta de trabajo, debajo de los botones ---
         tk.Label(f, text="Directorio de trabajo", bg=CARD, fg=MUT,
@@ -368,16 +394,18 @@ class App(tk.Tk):
         d = self.v_dir.get().strip()
         return d if d else os.path.expanduser("~/Desktop")
 
-    def _nombre_muestra(self, ident):
-        """Nombre del archivo a partir de los datos de la muestra.
+    def _nombre_base(self, ident):
+        """Nombre sin extensión, a partir de los datos de la muestra.
 
         Se arma con lo que identifica una muestra en el reporte: el número de
         perforación y el de muestra, más el tipo de ensayo.
 
-            Perforación 1, Muestra 5  ->  PM1_M5_GRAD.json
+            Perforación 1, Muestra 5  ->  PM1_M5_GRAD
 
         Si falta alguno se omite esa parte en vez de inventar un número, y si
-        faltan los dos queda un nombre genérico.
+        faltan los dos queda un nombre genérico. El .json y el .pdf usan este
+        mismo nombre y solo cambian de extensión, así se reconocen como el par
+        que son.
         """
         def limpio(v):
             return re.sub(r"[^0-9A-Za-z_-]+", "", (v or "").strip().upper())
@@ -390,7 +418,10 @@ class App(tk.Tk):
         if muestra:
             partes.append("M%s" % muestra)
         partes.append("GRAD")
-        return "_".join(partes) + ".json"
+        return "_".join(partes)
+
+    def _nombre_muestra(self, ident):
+        return self._nombre_base(ident) + ".json"
 
     def _guardar_muestra(self):
         """Guarda la muestra en la carpeta de trabajo, sin preguntar."""
@@ -931,8 +962,15 @@ class App(tk.Tk):
         for k, n in (("ll", 3), ("lp", 2)):
             filas = datos[k]
             datos[k] = filas[:n] + [{} for _ in range(max(0, n - len(filas)))]
-        pesos = datos["grano"].get("pesos") or []
-        datos["grano"]["pesos"] = list(pesos[:11]) + [None] * max(0, 11 - len(pesos))
+        pesos = list(datos["grano"].get("pesos") or [])
+        # Un archivo de la versión anterior tenía 11 tamices, sin el 1/2".
+        # Con solo rellenar al final, el peso del 3/8" se corría una fila y
+        # quedaba como si fuera el del 1/2", falseando toda la curva. Se
+        # inserta el hueco en su lugar: el 1/2" va entre 3/4" y 3/8".
+        if len(pesos) == N_TAMICES - 1:
+            pesos.insert(POS_1_2, None)
+        datos["grano"]["pesos"] = pesos[:N_TAMICES] + [None] * max(
+            0, N_TAMICES - len(pesos))
         self._aplicar_muestra(datos, ident)
         messagebox.showinfo("Abrir muestra", "Muestra cargada:\n%s" % path)
 
@@ -1028,11 +1066,13 @@ class App(tk.Tk):
             w.destroy()
         self._imgs = imgs
         for img in imgs:
-            # aire alrededor de la hoja, para que no quede pegada al borde
+            # aire alrededor de la hoja, para que no quede pegada al borde.
+            # Con `expand=True` la hoja queda centrada en el panel: pegada al
+            # borde izquierdo se veía descuadrada al abrir la app.
             lab = tk.Label(self.report_area, image=img, bg=FONDO_VISOR,
                            highlightthickness=1, highlightbackground=BORDE_HOJA)
-            lab.pack(side="top",
-                     padx=self.PAD_HOJA, pady=(self.PAD_HOJA, 0))
+            lab.pack(side="top", expand=True,
+                     padx=self.PAD_HOJA, pady=self.PAD_HOJA)
 
     def _show_preview_msg(self, text):
         for w in self.report_area.winfo_children():
@@ -1053,12 +1093,23 @@ class App(tk.Tk):
         from reporte.pdf import report_pdf
         datos = self._datos()
         res = motor_calcular(datos)
-        nombre = "GRAD-PLAS_reporte_%s.pdf" % datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        path = filedialog.asksaveasfilename(
-            title="Guardar reporte PDF", defaultextension=".pdf",
-            filetypes=[("PDF", "*.pdf")], initialfile=nombre,
-            initialdir=os.path.expanduser("~/Desktop"))
-        if not path:
+        ident = self._ident_dict()
+        d = self._dir_trabajo()
+        if not os.path.isdir(d):
+            messagebox.showerror(
+                "Guardar PDF",
+                "La carpeta de trabajo no existe:\n%s\n\nElíjala de nuevo con "
+                "el botón de carpeta." % d)
+            return
+        # El PDF va a la carpeta de trabajo con el nombre del archivo de
+        # muestra y solo cambia la extensión: PM1_M5_GRAD.json deja su reporte
+        # en PM1_M5_GRAD.pdf, al lado. Así los dos archivos se reconocen como el
+        # par que son y no hay nada que elegir en cada guardado.
+        path = os.path.join(d, self._nombre_base(ident) + ".pdf")
+        if os.path.isfile(path) and not messagebox.askyesno(
+                "Guardar PDF",
+                "Ya existe un reporte con ese nombre:\n%s\n\n¿Reemplazarlo?"
+                % path):
             return
         try:
             report_pdf(datos, res, self._ident(), path)

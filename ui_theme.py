@@ -224,12 +224,19 @@ def aplicar_estilo(root):
                 font=(FAM_UI, 10))
     # el foco va en azul marino: el ámbar sobre blanco da 1.9:1 y no se ve
     s.map("TEntry", bordercolor=[("focus", ACC)])
+    #: Alto de los botones de Muestra, en píxeles. Los dos estilos llevan el
+    #: mismo `padding` vertical para que, con el mismo `width` en caracteres,
+    #: los dos botones midan exactamente lo mismo.
+    _ALTO_BTN = 30
+
     s.configure("Accent.TButton", background=ACC, foreground="#ffffff",
-                padding=[14, 8], font=("Segoe UI", 10, "bold"), bordercolor=ACC)
+                padding=[14, 8], font=("Segoe UI", 10, "bold"), bordercolor=ACC,
+                height=_ALTO_BTN)
     s.map("Accent.TButton", background=[("active", ACC_D), ("pressed", ACC_D)],
           foreground=[("active", "#ffffff")])
     s.configure("Ghost.TButton", background=CREMA, foreground=TXT,
-                padding=[10, 3], font=("Segoe UI", 10), bordercolor=CREMA)
+                padding=[14, 8], font=("Segoe UI", 10), bordercolor=CREMA,
+                height=_ALTO_BTN)
     s.map("Ghost.TButton", background=[("active", AMBAR)])
     s.configure("Res.TButton", background=AMBAR, foreground=NEGRO,
                 padding=[10, 3], font=("Segoe UI", 10, "bold"),
@@ -400,7 +407,7 @@ class ZoomSlider(tk.Canvas):
         self._arrastrando = False
         self._hover = False
         self._cuerpo = 10
-        self._margen = self.ANCHO_TIRADOR // 2
+        self._margen = self.ANCHO_TIRADOR // 2 + self.ESPESOR_BORDE
         self.bind("<Configure>", lambda e: self._dibujar())
         self.bind("<Button-1>", self._clic)
         self.bind("<B1-Motion>", self._mover)
@@ -421,6 +428,12 @@ class ZoomSlider(tk.Canvas):
         self._dibujar()
 
     # ---- dibujo ----
+    #: radio del tirador. El borde va en ámbar para que se vea por dónde va
+    #: el zoom; el azul de la paleta da 1.9:1 sobre el gris, así que el tirador
+    #: necesita el contorno para no perderse contra la vía.
+    RADIO = 8
+    ESPESOR_BORDE = 2
+
     def _x_del_valor(self, v):
         span = self._max - self._min
         util = max(1, self.winfo_width() - self._margen * 2)
@@ -435,13 +448,15 @@ class ZoomSlider(tk.Canvas):
         cy = self.winfo_height() // 2
         x0, x1 = self._margen, w - self._margen
         color = ACC_D if self._hover else PULGAR
+        r = self.RADIO
         self.create_line(x0, cy, x1, cy, fill=PLANO_BARRA, width=4,
                          capstyle="round")
         x = self._x_del_valor(self._valor)
         self.create_line(x0, cy, x, cy, fill=color, width=4, capstyle="round")
-        self.create_rectangle(x - 7, cy - self._cuerpo // 2,
-                              x + 7, cy + self._cuerpo // 2,
-                              fill=color, outline="")
+        # tirador circular: relleno azul con borde ámbar
+        self.create_oval(x - r, cy - r, x + r, cy + r,
+                         fill=color, outline=AMBAR,
+                         width=self.ESPESOR_BORDE)
 
     def _cambiar_hover(self, v):
         self._hover = bool(v)

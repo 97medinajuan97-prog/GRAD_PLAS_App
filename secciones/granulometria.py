@@ -17,23 +17,38 @@ from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, AMBAR,
                       NEGRO, ToolTip, FAM_UI, validar_tecla, ayuda_seccion)
 from motor.calculo import fnum
 
+#: Tamices de la granulometría, de mayor a menor. El 1/2" (12.70 mm) se agregó
+#: porque en la curva de densidad es el salto de la grava gruesa a la arena
+#: gruesa y sin él esa zona quedaba sin apoyo en la interpolación.
 SIEVES = [
     ('3"', 76.2), ('2 1/2"', 63.5), ('2"', 50.8), ('1 1/2"', 38.1),
-    ('1"', 25.4), ('3/4"', 19.05), ('3/8"', 9.525),
+    ('1"', 25.4), ('3/4"', 19.05), ('1/2"', 12.7), ('3/8"', 9.525),
     ('N° 4', 4.75), ('N° 10', 2.0), ('N° 40', 0.425),
     ('N° 200', 0.075), ('FONDO', 0.0),
 ]
+#: cantidad de tamices con peso retenido que se digitan. El FONDO va aparte:
+#: se calcula restando el total menos la suma, no se escribe.
+N_TAMICES = len(SIEVES) - 1
+#: posición del 1/2" dentro de `SIEVES`. La necesitan también quienes leen un
+#: archivo de muestra de la versión anterior, que no tenía ese tamiz: el hueco
+#: va aquí, no al final, o los pesos siguientes se corren una fila y el 3/8"
+#: aparecería como si fuera el 1/2", falseando media curva.
+POS_1_2 = next(i for i, (t, _) in enumerate(SIEVES) if t == '1/2"')
 DIAM = [d for _, d in SIEVES]
 
 
 def calcular_granulometria(d):
-    """d: {'total': texto|None, 'pesos': 11 pesos retenidos}. Curva completa.
-    El fondo se calcula restando la suma del total (o se ignora si viene
-    como 12º elemento 'auto')."""
+    """d: {'total': texto|None, 'pesos': N_TAMICES pesos retenidos}.
+
+    La lista se normaliza a N_TAMICES elementos: si viene corta, como cuando
+    se carga un archivo .json de la versión anterior (que tenía un tamiz menos),
+    se rellena con None en vez de acortar la curva, porque si no el fondo
+    quedaría corrido una fila y los %salían mal. El fondo se calcula restando
+    la suma del total; no se escribe.
+    """
     total = fnum(d.get("total"))
-    pesos = list(d["pesos"])
-    if len(pesos) > 11:
-        pesos = pesos[:11]
+    pesos = list(d["pesos"])[:N_TAMICES]
+    pesos += [None] * (N_TAMICES - len(pesos))
     sumw = sum(w for w in pesos if w is not None)
     fondo = (total - sumw) if total is not None else None
     total_ef = total if total is not None else sumw
@@ -157,7 +172,7 @@ class Granulometria(Seccion):
         self.v_fondo.set("auto")
         self.peso_vars = [tk.StringVar() for _ in SIEVES[:-1]]
         self.registrar(*self.peso_vars)
-        self.v_res = [[tk.StringVar() for _ in range(3)] for _ in range(12)]
+        self.v_res = [[tk.StringVar() for _ in range(3)] for _ in range(len(SIEVES))]
 
         self._build_pesos()
         self._build_cuerpo()
