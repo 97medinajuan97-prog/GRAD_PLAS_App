@@ -252,7 +252,10 @@ def _construir(entrada):
         "proyecto": _RNG.choice(PROYECTOS),
         "sector": _RNG.choice(SECTORES),
         "ordenado": _RNG.choice(ORDENADO),
-        "sondeo": "S-%d" % _RNG.randint(1, 12),
+        # Solo el número: el prefijo lo pone la app al imprimir (PM-3, M-2),
+        # igual que si lo teclea el usuario. Es lo que fija el nombre del
+        # archivo de la muestra: PM3_M2_GRAD.json
+        "sondeo": str(_RNG.randint(1, 12)),
         "muestra": str(_RNG.randint(1, 3)),
         "fecha_toma": _fecha(base, _RNG.randint(0, 40)),
         "fecha_ejecucion": _fecha(base, _RNG.randint(45, 80)),

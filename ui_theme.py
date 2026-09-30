@@ -322,6 +322,10 @@ class ScrollableFrame(ttk.Frame):
         w = self._canvas.winfo_width()
         return w if w and w > 20 else 560
 
+    def canvas_height(self):
+        h = self._canvas.winfo_height()
+        return h if h and h > 20 else 700
+
     def bind_resize(self, cb):
         self._canvas.bind("<Configure>", lambda e: cb())
 

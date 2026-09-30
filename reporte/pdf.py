@@ -1327,6 +1327,11 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     IZQ = 16.0                  # columna del titulo Y rotado
     DER = 16.0                  # valores del eje Y (derecha, fuera del marco)
     INF = 18.0                  # etiquetas eje X (décadas, límites y título)
+    # Separación entre el área trazada y los rótulos de abajo. Antes las
+    # etiquetas de tamaños quedaban a 6 pt del eje, tan pegadas que se leían
+    # como parte del marco; se separan 3 pt más para que respiren.
+    EIX_LBL = 9.0               # línea base de los rótulos de tamaños
+    EIX_TIT = 15.5              # línea base del título del eje X
     x, y, w, h = box
     x0, y0, w0, h0 = x + PAD, y + PAD_B, w - 2.0 * PAD, h - PAD - PAD_B
     top = y0 + h0               # borde superior del contenido (inset del borde)
@@ -1478,7 +1483,7 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     c.setFillColor(CL_NEGRO)
     for label, d in (("100.00", 100.0), ("10.00", 10.0), ("1.00", 1.0),
                      ("0.10", 0.1), ("0.01", 0.01)):
-        c.drawCentredString(XLOG(d), py0 - 6.0, label)
+        c.drawCentredString(XLOG(d), py0 - EIX_LBL, label)
     # valores de división y subdivisión de tamaños de partícula sobre el eje,
     # a LA MISMA ALTURA que las décadas: cada uno con su color (identidad o
     # subdivisión) y su marca corta, en la posición de las líneas punteadas.
@@ -1490,10 +1495,10 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
         c.line(xx, py0, xx, py0 + 2.0)              # marca corta hacia afuera
         c.setFillColor(color)
         c.setFont(fnb, 4.5)
-        c.drawCentredString(xx, py0 - 6.0, "%.3g" % d)
+        c.drawCentredString(xx, py0 - EIX_LBL, "%.3g" % d)
     c.setFont(fn, 6.0)
     c.setFillColor(CL_NEGRO)
-    c.drawCentredString(px0 + pw / 2.0, py0 - 12.0,
+    c.drawCentredString(px0 + pw / 2.0, py0 - EIX_TIT,
                         "DI\u00c1METRO DE PART\u00cdCULAS (mm)")
 
     # ---- eje Y: marcas, etiquetas a la derecha y titulo rotado ----

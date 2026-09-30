@@ -74,10 +74,12 @@ class Humedad(Seccion):
     SIG_FULL = "\n".join(
         "· %s (%s): %s" % (s, u, t) for s, u, t in D.values())
 
-    # columnas: ingreso (izquierda) y resultados (derecha), por orden de fila
-    COLS = (
-        ("id", "recip", "hum", "seco"),
-        ("agua", "suelo", "res"),
+    #: Disposición del ingreso: dos filas de dos casillas.
+    #: Los resultados (Ww, Ws y ω) ya no se muestran aquí; se leen en el
+    #: reporte, junto a la granulometría que se apoya en el peso seco.
+    FILAS = (
+        ("id", "recip"),
+        ("hum", "seco"),
     )
 
     def __init__(self, master):
@@ -88,9 +90,6 @@ class Humedad(Seccion):
         self.v_recip = tk.StringVar()
         self.v_hum = tk.StringVar()
         self.v_seco = tk.StringVar()
-        self.v_agua = tk.StringVar()
-        self.v_suelo = tk.StringVar()
-        self.v_res = tk.StringVar()
         self.registrar(self.v_id, self.v_recip, self.v_hum, self.v_seco)
 
         self._inputs = []
@@ -99,45 +98,42 @@ class Humedad(Seccion):
 
         self.aviso_lbl = tk.Label(self, text="", foreground="#a0432e",
                                   bg=CARD, font=(FAM_UI, 9, "bold"))
-        self.aviso_lbl.grid(row=2, column=0, columnspan=2, sticky="e",
+        self.aviso_lbl.grid(row=2, column=0, sticky="e",
                             padx=2, pady=(4, 0))
         self._aviso_tip = ToolTip(self.aviso_lbl, "")
 
-        self.columnconfigure(0, weight=3)
-        self.columnconfigure(1, weight=2)
+        self.columnconfigure(0, weight=1)
         self._ayuda = ayuda_seccion(self, self.SIG_FULL)
 
-    # ---------------- dos columnas: ingreso | resultados ----------------
+    # ---------------- ingreso en dos filas de dos casillas ----------------
     def _build_cuerpo(self):
         cuerpo = tk.Frame(self, bg=CARD)
-        cuerpo.grid(row=1, column=0, columnspan=2, sticky="ew")
-        cuerpo.columnconfigure(0, weight=3)
-        cuerpo.columnconfigure(1, weight=2)
-        for c, grupo in enumerate(self.COLS):
-            col = tk.Frame(cuerpo, bg=CARD)
-            col.grid(row=0, column=c, sticky="nsew",
-                     padx=(0, 10) if c == 0 else (10, 0))
-            col.columnconfigure(0, minsize=36)
-            col.columnconfigure(1, weight=1)
-            for i, clave in enumerate(grupo):
-                self._celda(col, i, clave)
+        cuerpo.grid(row=1, column=0, sticky="ew")
+        for c in range(2):
+            cuerpo.columnconfigure(c, weight=1, uniform="hum")
+        for f, grupo in enumerate(self.FILAS):
+            for c, clave in enumerate(grupo):
+                self._celda(cuerpo, f, c, clave)
 
-    def _celda(self, parent, fila, clave):
-        """Fila horizontal con columnas fijas: nombre, caja. Así todas
-        las cajas de la sección quedan alineadas."""
+    def _celda(self, parent, fila, col, clave):
+        """Casilla con su rótulo a la izquierda, en una rejilla 2x2."""
         simbolo, unidad, _sig = self.D[clave]
-        lbl = tk.Frame(parent, bg=CARD)
-        lbl.grid(row=fila, column=0, sticky="w", pady=2)
+        marco = tk.Frame(parent, bg=CARD)
+        marco.grid(row=fila, column=col, sticky="ew", padx=(0, 12),
+                   pady=2)
+        marco.columnconfigure(1, weight=1)
+        lbl = tk.Frame(marco, bg=CARD)
+        lbl.grid(row=0, column=0, sticky="w", padx=(0, 6))
         tk.Label(lbl, text=simbolo, font=(FAM_UI, 10), fg=TXT,
                  bg=CARD).pack(side="left")
         if unidad:
             tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_UI, 10),
                      fg=MUT, bg=CARD).pack(side="left")
         editable = clave in ("id", "recip", "hum", "seco")
-        frm, num = self.caja(parent, getattr(self, "v_" + clave), unidad,
+        frm, num = self.caja(marco, getattr(self, "v_" + clave), unidad,
                              editable=editable,
                              tipo="decimal" if clave != "id" else "texto")
-        frm.grid(row=fila, column=1, sticky="ew", pady=2, padx=(6, 2))
+        frm.grid(row=0, column=1, sticky="ew")
         if editable:
             self._inputs.append(num)
 
@@ -213,12 +209,8 @@ class Humedad(Seccion):
                 "seco": fnum(self.v_seco.get())}
 
     def mostrar(self, res):
-        agua = res.get("w_agua")
-        suelo = res.get("w_suelo")
-        w = res.get("w_nat")
-        self.v_agua.set("—" if agua is None else "%.2f" % agua)
-        self.v_suelo.set("—" if suelo is None else "%.2f" % suelo)
-        self.v_res.set("—" if w is None else ("%.2f" % w))
+        # Los resultados (Ww, Ws, ω) no se muestran en la sección: se leen
+        # en el reporte. Aquí solo queda el aviso de coherencia del ingreso.
         corto, detalle = aviso_incoherencia(self.leer(), res)
         self.aviso_lbl.config(text=corto)
         self._aviso_tip.set_text(detalle)
@@ -234,8 +226,5 @@ class Humedad(Seccion):
         for v in (self.v_recip, self.v_hum, self.v_seco):
             v.set("")
         self.v_id.set("")
-        self.v_agua.set("—")
-        self.v_suelo.set("—")
-        self.v_res.set("—")
         self.aviso_lbl.config(text="")
         self._aviso_tip.set_text("")

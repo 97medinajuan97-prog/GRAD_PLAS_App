@@ -10,18 +10,22 @@ from tkinter import ttk, filedialog, messagebox
 
 from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D, BG,
                       CARD, MUT, SUP, TXT, FAM_UI, VERSION, validar_tecla,
-                      ayuda_seccion, SelectDropdown, habilitar_deshacer)
+                      ayuda_seccion, SelectDropdown, habilitar_deshacer,
+                      ToolTip)
 from secciones.humedad import Humedad
 from secciones.limites import Limites
 from secciones.granulometria import Granulometria
 from motor.calculo import calcular as motor_calcular, fnum
 from datos_ejemplo import datos_ejemplo, SIMBOLOS
 
-#: Título de la ventana. Antes se escribía literal dos veces (título del
-#: `Tk` y rótulo de la franja superior) y cualquier corrección había que
-#: replicarla en ambos sitios, con el riesgo de que se desincronizaran.
+#: Título de la ventana. Antes se escribía literal dos veces (título del `Tk`
+#: y rótulo de la franja superior) y cualquier corrección había que replicarla
+#: en ambos sitios, con el riesgo de que se desincronizaran.
 TITULO = ("Granulometría · Límites de Atterberg · Humedad natural"
           " — INV E-123 · E-125 · E-126")
+
+#: Formas de ver el reporte en el panel derecho.
+VISTAS = ("Ajustar al ancho", "Ver todo el alto")
 
 MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
          "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -112,6 +116,16 @@ class App(tk.Tk):
                   font=(FAM_UI, 11, "bold")).pack(side="left")
         ttk.Button(bar, text="Guardar PDF", style="Accent.TButton",
                    command=self._pdf).pack(side="right", padx=2)
+        # Dos formas de ver la hoja: ajustada al ancho del panel, o escalada
+        # para que quepa el alto completo y se lea de un vistazo.
+        ttk.Label(bar, text="Vista:", style="TLabel",
+                  font=(FAM_UI, 9)).pack(side="right", padx=(8, 4))
+        self.sel_vista = SelectDropdown(bar, list(VISTAS), inicial=VISTAS[0],
+                                        ancho=17)
+        self.sel_vista.pack(side="right", padx=(0, 8))
+        # se usa la variable del propio selector: una sola fuente de verdad
+        self.v_vista = self.sel_vista.var
+        self.v_vista.trace_add("write", self._cambio_vista)
         ttk.Label(self.right, text="Edita los datos a la izquierda y este reporte se actualiza solo.",
                   foreground="#6e7781", font=(FAM_UI, 8)).pack(anchor="w", pady=(0, 4))
         self.report_area = ttk.Frame(self.right)
@@ -126,7 +140,7 @@ class App(tk.Tk):
         self.right_sc.bind_resize(lambda: self._schedule_preview())
 
     def _build_muestra(self, parent):
-        """Caja de la muestra: abrir y guardar el archivo de la muestra.
+        """Caja de la muestra: carpeta de trabajo, abrir y guardar.
 
         Va antes de la identificación porque es la acción de primer nivel:
         se entra por el archivo, no escribiendo los datos a mano.
@@ -135,8 +149,28 @@ class App(tk.Tk):
                            style="Card.TLabelframe", padding=9,
                            labelanchor="n")
         f.pack(fill="x", pady=2)
+
+        # --- carpeta de trabajo ---
+        caja = tk.Frame(f, bg=CARD, highlightbackground=SUP,
+                        highlightthickness=1)
+        caja.pack(fill="x")
+        self.v_dir = tk.StringVar(value=self._leer_dir())
+        ent = tk.Entry(caja, textvariable=self.v_dir, bd=0, relief="flat",
+                       highlightthickness=0, bg=CARD, fg=TXT, justify="left",
+                       font=(FAM_UI, 9), insertbackground=TXT)
+        ent.pack(side="left", fill="x", expand=True, ipady=2, padx=(5, 2))
+        ToolTip(ent, "Carpeta de trabajo. 'Guardar muestra' escribe aquí, "
+                     "con el nombre que armen los datos de la muestra.")
+        btn_dir = tk.Button(caja, text="📁", font=("Segoe UI Emoji", 9),
+                            bg=CARD, fg=ACC, relief="flat", bd=0, padx=0,
+                            pady=0, activebackground=SUP, cursor="hand2",
+                            command=self._elegir_dir)
+        btn_dir.pack(side="right", padx=(2, 3))
+        ToolTip(btn_dir, "Elegir la carpeta de trabajo.")
+
+        # --- acciones ---
         fila = ttk.Frame(f, style="Card.TFrame")
-        fila.pack(fill="x")
+        fila.pack(fill="x", pady=(8, 0))
         ttk.Button(fila, text="Abrir muestra", style="Accent.TButton",
                    command=self._abrir_muestra).pack(side="left",
                                                      padx=(0, 6))
@@ -144,11 +178,103 @@ class App(tk.Tk):
                    command=self._guardar_muestra).pack(side="left")
         ayuda_seccion(
             f,
+            "Carpeta de trabajo: donde se guardan las muestras.\n"
             "Abrir muestra: carga una muestra guardada en un archivo .json.\n"
             "Guardar muestra: guarda TODO el ingreso actual (identificación, "
-            "humedad, límites y granulometría) en un archivo .json, en la "
-            "carpeta y con el nombre que se elijan.\n"
+            "humedad, límites y granulometría) en un archivo .json dentro de "
+            "la carpeta de trabajo. El nombre se arma con los datos de la "
+            "muestra: perforación, número de muestra y GRAD, por ejemplo "
+            "PM1_M5_GRAD.json.\n"
             "El archivo es texto plano: se puede revisar, copiar o versionar.")
+
+    # ---------------- carpeta de trabajo ----------------
+    #: archivo donde se recuerda la carpeta elegida entre sesiones. Va junto
+    #: a la aplicación, con ruta absoluta: si fuera relativo dependería del
+    #: directorio desde el que se arrancó y acabaría en otro sitio.
+    _CONF = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "grad_plas_config.json")
+
+    def _leer_dir(self):
+        """Carpeta de trabajo recordada; si no hay, el Escritorio."""
+        try:
+            with open(self._CONF, encoding="utf-8") as fh:
+                d = str(json.load(fh).get("directorio", "")).strip()
+            if d and os.path.isdir(d):
+                return d
+        except Exception:
+            pass            # sin configuración, o ilegible: se usa el defecto
+        return os.path.expanduser("~/Desktop")
+
+    def _recordar_dir(self, path):
+        try:
+            with open(self._CONF, "w", encoding="utf-8") as fh:
+                json.dump({"directorio": path}, fh, ensure_ascii=False,
+                          indent=1)
+        except OSError:
+            pass          # si no se puede escribir, la app sigue igual
+
+    def _elegir_dir(self):
+        d = filedialog.askdirectory(title="Carpeta de trabajo de las muestras",
+                                    initialdir=self.v_dir.get() or None)
+        if d:
+            self.v_dir.set(d)
+            self._recordar_dir(d)
+
+    def _dir_trabajo(self):
+        d = self.v_dir.get().strip()
+        return d if d else os.path.expanduser("~/Desktop")
+
+    def _nombre_muestra(self, ident):
+        """Nombre del archivo a partir de los datos de la muestra.
+
+        Se arma con lo que identifica una muestra en el reporte: el número de
+        perforación y el de muestra, más el tipo de ensayo.
+
+            Perforación 1, Muestra 5  ->  PM1_M5_GRAD.json
+
+        Si falta alguno se omite esa parte en vez de inventar un número, y si
+        faltan los dos queda un nombre genérico.
+        """
+        def limpio(v):
+            return re.sub(r"[^0-9A-Za-z_-]+", "", (v or "").strip().upper())
+
+        sondeo = limpio(ident.get("sondeo"))
+        muestra = limpio(ident.get("muestra"))
+        partes = []
+        if sondeo:
+            partes.append("PM%s" % sondeo)
+        if muestra:
+            partes.append("M%s" % muestra)
+        partes.append("GRAD")
+        return "_".join(partes) + ".json"
+
+    def _guardar_muestra(self):
+        """Guarda la muestra en la carpeta de trabajo, sin preguntar."""
+        datos = self._datos()
+        ident = self._ident_dict()
+        d = self._dir_trabajo()
+        if not os.path.isdir(d):
+            messagebox.showerror(
+                "Guardar muestra",
+                "La carpeta de trabajo no existe:\n%s\n\nElíjala de nuevo con "
+                "el botón de carpeta." % d)
+            return
+        path = os.path.join(d, self._nombre_muestra(ident))
+        if os.path.isfile(path) and not messagebox.askyesno(
+                "Guardar muestra",
+                "Ya existe un archivo con ese nombre:\n%s\n\n¿Reemplazarlo?"
+                % path):
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"formato": "GRAD-PLAS muestra", "version": 1,
+                           "ident": ident, "datos": datos},
+                          fh, ensure_ascii=False, indent=2)
+        except OSError as e:
+            messagebox.showerror("Guardar muestra",
+                                 "No se pudo escribir el archivo:\n%s" % e)
+            return
+        messagebox.showinfo("Guardar muestra", "Muestra guardada:\n%s" % path)
 
     def _build_identidad(self, parent):
         f = ttk.LabelFrame(parent, text=" Información de la muestra ",
@@ -173,10 +299,11 @@ class App(tk.Tk):
             ("fecha_ejecucion", "Fecha de ejecución", "fecha", True),
         ]
         self.ident_ents = []
+        self._casillas_ident = []
         for i, (k, lab, tip, cal) in enumerate(campos):
             tk.Label(f, text=lab, bg=CARD, fg=TXT,
                      font=(FAM_UI, 10)).grid(row=i, column=0,
-                                                sticky="e", padx=(2, 6), pady=2)
+                                                 sticky="e", padx=(2, 6), pady=2)
             frm = tk.Frame(f, bg=CARD, highlightbackground=SUP,
                            highlightthickness=1)
             frm.grid(row=i, column=1, padx=3, pady=2, sticky="ew")
@@ -195,7 +322,10 @@ class App(tk.Tk):
             e.bind("<Down>", lambda ev, idx=i: self._ident_mov(idx, +1))
             e.bind("<Return>", lambda ev, idx=i: self._ident_mov(idx, +1, True))
             e.bind("<Up>", lambda ev, idx=i: self._ident_mov(idx, -1))
+            e.bind("<KeyRelease>", self._a_mayusculas, add="+")
             self.ident_ents.append(e)
+            self._casillas_ident.append((self.idvars[k], e))
+
 
         # ---------------- profundidad: rango "6.00 m a 5.60 m" ----------------
         i = len(campos)
@@ -221,12 +351,14 @@ class App(tk.Tk):
         tk.Label(f2, text="m", bg=CARD, fg=MUT, font=(FAM_UI, 8),
                  padx=2).pack(side="right")
         base = len(self.ident_ents)
-        for rel, wdg in ((0, d1), (1, d2)):
-            idx = base + rel
+        for clave, wdg in (("prof_desde", d1), ("prof_hasta", d2)):
+            idx = base + (0 if clave == "prof_desde" else 1)
             wdg.bind("<Down>", lambda ev, i=idx: self._ident_mov(i, +1))
             wdg.bind("<Return>", lambda ev, i=idx: self._ident_mov(i, +1, True))
             wdg.bind("<Up>", lambda ev, i=idx: self._ident_mov(i, -1))
+            wdg.bind("<KeyRelease>", self._a_mayusculas, add="+")
             self.ident_ents.append(wdg)
+            self._casillas_ident.append((self.idvars[clave], wdg))
 
         # ---------------- color del material (texto corto) ----------------
         # La descripción del material la compone sola el reporte a partir de
@@ -258,7 +390,8 @@ class App(tk.Tk):
             self._ident_foco_ultimo(), "break"))
         self.ident_desc.bind("<Down>", lambda ev: (
             self._ident_foco_primero(), "break"))
-        self.ident_desc.bind("<KeyRelease>", lambda ev: (self._ajustar_desc(),
+        self.ident_desc.bind("<KeyRelease>", lambda ev: (self._a_mayusculas(),
+                                                         self._ajustar_desc(),
                                                          self._refresh()))
         self.ident_desc.bind("<Configure>", self._ajustar_desc)
 
@@ -296,6 +429,33 @@ class App(tk.Tk):
 
     def _ident_focusout(self, parent):
         parent.config(highlightbackground=SUP, highlightthickness=1)
+
+    def _a_mayusculas(self, *_):
+        """Fuerza mayúsculas en todo el texto de identificación.
+
+        El reporte reproduce estos textos tal cual, así que convertirlos al
+        escribir evita que en el PDF aparezca una línea en minúscula o
+        combinada junto a las demás, que van todas en mayúscula. El cursor
+        se lleva al final porque, al reescribir la variable, Tk lo deja
+        donde estaba y el texto parecería saltarse caracteres.
+        """
+        for var, wdg in self._casillas_ident:
+            v = var.get()
+            if v and v != v.upper():
+                var.set(v.upper())
+                try:
+                    wdg.icursor("end")
+                except tk.TclError:
+                    pass
+        txt = self.ident_desc.get("1.0", "end-1c")
+        may = txt.upper()
+        if may != txt:
+            pos = self.ident_desc.index("insert")
+            self.ident_desc.delete("1.0", "end-1c")
+            self.ident_desc.insert("1.0", may)
+            self.ident_desc.mark_set("insert", pos)
+            # el cambio de caja no debe llenar el historial de deshacer
+            self.ident_desc.edit_reset()
 
     def _ajustar_desc(self, *_):
         """Ajusta la altura de la descripción al contenido, creciendo hacia abajo."""
@@ -587,38 +747,15 @@ class App(tk.Tk):
         self._ajustar_desc()
         self._refresh()
 
-    def _guardar_muestra(self):
-        """Guarda la muestra en un archivo .json eligiendo la ubicación."""
-        datos = self._datos()
-        ident = self._ident_dict()
-        if ident.get("proyecto") or ident.get("muestra"):
-            base = "GRAD-PLAS_muestra%s" % (ident["muestra"] or "")
-        else:
-            base = "GRAD-PLAS_muestra"
-        path = filedialog.asksaveasfilename(
-            title="Guardar muestra", defaultextension=".json",
-            filetypes=[("Muestra GRAD-PLAS", "*.json")],
-            initialfile=base + ".json",
-            initialdir=os.path.expanduser("~/Desktop"))
-        if not path:
-            return
-        try:
-            with open(path, "w", encoding="utf-8") as fh:
-                json.dump({"formato": "GRAD-PLAS muestra", "version": 1,
-                           "ident": ident, "datos": datos},
-                          fh, ensure_ascii=False, indent=2)
-        except OSError as e:
-            messagebox.showerror("Guardar muestra",
-                                 "No se pudo escribir el archivo:\n%s" % e)
-            return
-        messagebox.showinfo("Guardar muestra", "Muestra guardada:\n%s" % path)
-
     def _abrir_muestra(self):
         """Carga una muestra desde un archivo .json."""
+        ruta = self._dir_trabajo()
+        if not os.path.isdir(ruta):
+            ruta = os.path.expanduser("~/Desktop")
         path = filedialog.askopenfilename(
             title="Abrir muestra", filetypes=[("Muestra GRAD-PLAS", "*.json"),
                                               ("Todos los archivos", "*.*")],
-            initialdir=os.path.expanduser("~/Desktop"))
+            initialdir=ruta)
         if not path:
             return
         try:
@@ -655,16 +792,30 @@ class App(tk.Tk):
         self._aplicar_muestra(datos, ident)
         messagebox.showinfo("Abrir muestra", "Muestra cargada:\n%s" % path)
 
+    def _codigo(self, valor, prefijo):
+        """'1' + 'PM' -> 'PM-1'. Los códigos de la muestra se escriben con
+        su prefijo en el reporte, pero el usuario solo teclea el número.
+        Si ya viene con el prefijo, no se duplica."""
+        v = (valor or "").strip()
+        if not v:
+            return ""
+        if v.upper().startswith(prefijo):
+            return v
+        return "%s-%s" % (prefijo, v)
+
     def _ident(self):
         out = []
         for k, lab in [("proyecto", "Proyecto"), ("sector", "Sector"),
-                       ("ordenado", "Ordenado por"), ("muestra", "Muestra N°"),
+                       ("ordenado", "Ordenado por"),
+                       ("muestra", "Muestra N°"),
                        ("fecha_toma", "Fecha de toma"),
                        ("fecha_ejecucion", "Fecha de ejecución")]:
             v = self.idvars[k].get().strip()
+            if k == "muestra":
+                v = self._codigo(v, "M")
             if v:
                 out.append("%s: %s" % (lab, v))
-        v = self.idvars["sondeo"].get().strip()
+        v = self._codigo(self.idvars["sondeo"].get(), "PM")
         if v:
             out.append("Perforación N°: %s" % v)
         desde = self.idvars["prof_desde"].get().strip()
@@ -700,6 +851,22 @@ class App(tk.Tk):
             self.after_cancel(self._preview_after)
         self._preview_after = self.after(ms, self._render_preview)
 
+    def _cambio_vista(self, *_):
+        """Cambia entre ajustar al ancho y ver el alto completo."""
+        self._render_preview()
+
+    def _zoom_preview(self, page):
+        """Factor de escala de la vista del reporte.
+
+        'Ajustar al ancho' escala para que la hoja entre a lo ancho del panel.
+        'Ver todo el alto' escala para que entre el ALTO completo de una vez,
+        que sale más pequeña y con la hoja entera a la vista.
+        """
+        if self.v_vista.get() == VISTAS[1]:
+            alto = self.right_sc.canvas_height() - 14   # aire arriba y abajo
+            return alto / float(page.rect.height)
+        return self.right_sc.canvas_width() / float(page.rect.width)
+
     def _render_preview(self):
         self._preview_after = None
         if self._datos_actuales is None:
@@ -713,10 +880,9 @@ class App(tk.Tk):
             from reporte.pdf import preview_pdf
             pdf = preview_pdf(self._datos_actuales, self._res_actuales, self._ident())
             doc = fitz.open(pdf)
-            width = self.right_sc.canvas_width()
             imgs = []
             for page in doc:
-                z = width / page.rect.width
+                z = self._zoom_preview(page)
                 pix = page.get_pixmap(matrix=fitz.Matrix(z, z))
                 png = pix.tobytes("png")
                 img = tk.PhotoImage(data=png)

@@ -43,12 +43,8 @@ class Limites(Seccion):
 
         self.v_np = tk.BooleanVar(value=False)
         self.registrar(self.v_np)
-        self.v_ll = tk.StringVar()
-        self.v_lp = tk.StringVar()
-        self.v_ip = tk.StringVar()
-        self.v_ll.set("—")
-        self.v_lp.set("—")
-        self.v_ip.set("—")
+        # Los resultados (LL, LP, IP) no se muestran aquí: se consultan en el
+        # reporte, que es donde se leen con la curva de fluidez al lado.
 
         self.ll_v = [[tk.StringVar() for _ in range(5)] for _ in range(3)]
         self.ll_w = [tk.StringVar() for _ in range(3)]
@@ -110,8 +106,6 @@ class Limites(Seccion):
                 self._tabla_lp(lp)
             sep = tk.Frame(cuerpo, bg=SUP, height=1)
             sep.pack(fill="x", pady=(6, 8))
-
-        self._build_resultados()
 
     def _tabla_ll(self, parent):
         keys = ("id", "n", "recip", "hum", "seco")
@@ -183,24 +177,6 @@ class Limites(Seccion):
             tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_UI, 10),
                      fg=MUT, bg=CARD).pack(side="left")
 
-    # ---------------- fila final: LL | LP | IP en la misma fila -------------
-    def _build_resultados(self):
-        fila = tk.Frame(self, bg=CARD)
-        fila.grid(row=2, column=0, sticky="w", pady=(6, 0))
-        self._celda_res(fila, self.v_ll, "LL", self.Sig["LL"], "%")
-        self._celda_res(fila, self.v_lp, "LP", self.Sig["LP"], "%")
-        self._celda_res(fila, self.v_ip, "IP", self.Sig["IP"], "%")
-
-    def _celda_res(self, parent, var, simbolo, sig, unidad):
-        fr = tk.Frame(parent, bg=CARD)
-        fr.pack(side="left", padx=(0, 16))
-        tk.Label(fr, text=simbolo, font=(FAM_UI, 10), fg=TXT,
-                 bg=CARD).pack(side="left")
-        tk.Label(fr, text=" (%s)" % unidad, font=(FAM_UI, 10), fg=MUT,
-                 bg=CARD).pack(side="left")
-        frm, num = self.caja(fr, var, "", editable=False)
-        frm.pack(side="left", pady=(2, 0))
-
     # ---------------- muestra sin plasticidad ----------------
     def _toggle_np(self):
         self._aplicar_np()
@@ -245,11 +221,16 @@ class Limites(Seccion):
         return frm, num
 
     def _formatear_entrada(self, num, var, tipo="decimal"):
+        """Al salir de la casilla, el valor queda con su formato.
+
+        El N° de golpes es un conteo: se muestra como entero, sin decimales
+        (25, no 25.00). Los pesos llevan 2 decimales fijos.
+        """
         if tipo == "texto":
             return
         v = fnum(var.get())
         if v is not None:
-            var.set("%.2f" % v)
+            var.set("%.0f" % v if tipo == "entero" else "%.2f" % v)
 
     def _bind_navegacion(self):
         """Celda de ingreso unificada: filas 0-2 del líquido (4 columnas) y
@@ -336,12 +317,6 @@ class Limites(Seccion):
         for i in range(2):
             w = None if np_ else res["lp_w"][i]
             self.lp_w[i].set("—" if w is None else "%.2f" % w)
-        for var, key in ((self.v_ll, "LL"), (self.v_lp, "LP"), (self.v_ip, "IP")):
-            if np_:
-                var.set("NP")
-            else:
-                v = res.get(key)
-                var.set("—" if v is None else "%.2f" % v)
         if np_:
             self.aviso_lbl.config(text="")
             self._aviso_tip.set_text("")
@@ -387,9 +362,6 @@ class Limites(Seccion):
                 self.lp_v[i][c].set("")
         for v in self.ll_w + self.lp_w:
             v.set("—")
-        self.v_ll.set("—")
-        self.v_lp.set("—")
-        self.v_ip.set("—")
         self.aviso_lbl.config(text="")
         self._aviso_tip.set_text("")
         self._aplicar_np()

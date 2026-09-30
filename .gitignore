@@ -5,3 +5,6 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# Configuración local de esta instalación (carpeta de trabajo de las muestras)
+grad_plas_config.json
