@@ -1370,7 +1370,16 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     if sie:
         con_peso = sum(1 for s in sie
                        if s.get("w") is not None and s.get("diam"))
-        raw = [(s.get("diam"), s.get("pasa")) for s in sie]
+        # La curva arranca en el tamiz INMEDIATAMENTE ANTERIOR al primero que
+        # retiene. Los tamices de arriba están todos al 100 % y dibujarlos
+        # extendía una línea plana que cruzaba de lado a lado la zona de los
+        # tamaños de partícula, invadiendo el área de la grava gruesa y el
+        # encabezado de la gráfica. Con este recorte la curva empieza justo
+        # donde el material empieza a tamizarse.
+        pesados = [i for i, s in enumerate(sie)
+                  if s.get("w") is not None and s.get("diam")]
+        ini = max(0, pesados[0] - 1) if pesados else 0
+        raw = [(s.get("diam"), s.get("pasa")) for s in sie[ini:]]
         raw = [(d, p) for (d, p) in raw if d and d > 0.0 and p is not None]
         pts = list(sorted(raw, key=lambda r: -r[0]))
     sin_datos = con_peso == 0 or len(pts) < 3
@@ -1434,13 +1443,14 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
         c.setLineCap(1)
         c.drawPath(path, stroke=1, fill=0)
         c.setLineJoin(0); c.setLineCap(0)
-    # 5) puntos de datos como en la curva de fluidez: circulo azul de marca
-    #    con borde negro
+    # 5) puntos de datos: círculo azul macizo, sin borde negro y más pequeño.
+    #    El borde negro sobre un trazo ya fino lo engordaba y los marcadores
+    #    parecían más pesados que la propia curva.
     c.setFillColor(CL_BRAND)
-    c.setStrokeColor(CL_NEGRO)
-    c.setLineWidth(0.6)
+    c.setStrokeColor(CL_BRAND)
+    c.setLineWidth(0.3)
     for (mx, my) in pts:
-        c.circle(mx, my, 1.425, stroke=1, fill=1)
+        c.circle(mx, my, 0.9, stroke=0, fill=1)
     # 6) marco negro del area de trazado
     c.setStrokeColor(CL_NEGRO)
     c.setLineWidth(0.5)

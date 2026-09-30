@@ -2,6 +2,7 @@
 """Ventana principal: panel izquierdo de ingreso (secciones) + panel derecho
 con el reporte en vivo. Cada sección es un módulo independiente."""
 import datetime
+import json
 import os
 import re
 import tkinter as tk
@@ -9,7 +10,7 @@ from tkinter import ttk, filedialog, messagebox
 
 from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D, BG,
                       CARD, MUT, SUP, TXT, FAM_UI, VERSION, validar_tecla,
-                      ayuda_seccion, SelectDropdown)
+                      ayuda_seccion, SelectDropdown, habilitar_deshacer)
 from secciones.humedad import Humedad
 from secciones.limites import Limites
 from secciones.granulometria import Granulometria
@@ -44,6 +45,10 @@ class App(tk.Tk):
 
         self._build()
 
+        # Ctrl+Z en todo el ingreso de datos. Va después de _build para que
+        # existan ya todas las casillas.
+        habilitar_deshacer(self)
+
         for v in self.idvars.values():
             v.trace_add("write", lambda *_: self._refresh())
         self._schedule_preview(200)
@@ -76,6 +81,7 @@ class App(tk.Tk):
         self.right = self.right_sc.inner()
 
         # ---- panel izquierdo: secciones independientes ----
+        self._build_muestra(left)
         self._build_identidad(left)
 
         self.hum = Humedad(left)
@@ -118,6 +124,31 @@ class App(tk.Tk):
         h = min(800, sh - 100)
         self.geometry("%dx%d+%d+%d" % (w, h, max(0, (sw - w) // 2), max(0, (sh - h) // 3)))
         self.right_sc.bind_resize(lambda: self._schedule_preview())
+
+    def _build_muestra(self, parent):
+        """Caja de la muestra: abrir y guardar el archivo de la muestra.
+
+        Va antes de la identificación porque es la acción de primer nivel:
+        se entra por el archivo, no escribiendo los datos a mano.
+        """
+        f = ttk.LabelFrame(parent, text=" Muestra ",
+                           style="Card.TLabelframe", padding=9,
+                           labelanchor="n")
+        f.pack(fill="x", pady=2)
+        fila = ttk.Frame(f, style="Card.TFrame")
+        fila.pack(fill="x")
+        ttk.Button(fila, text="Abrir muestra", style="Accent.TButton",
+                   command=self._abrir_muestra).pack(side="left",
+                                                     padx=(0, 6))
+        ttk.Button(fila, text="Guardar muestra", style="Ghost.TButton",
+                   command=self._guardar_muestra).pack(side="left")
+        ayuda_seccion(
+            f,
+            "Abrir muestra: carga una muestra guardada en un archivo .json.\n"
+            "Guardar muestra: guarda TODO el ingreso actual (identificación, "
+            "humedad, límites y granulometría) en un archivo .json, en la "
+            "carpeta y con el nombre que se elijan.\n"
+            "El archivo es texto plano: se puede revisar, copiar o versionar.")
 
     def _build_identidad(self, parent):
         f = ttk.LabelFrame(parent, text=" Información de la muestra ",
@@ -216,8 +247,17 @@ class App(tk.Tk):
             highlightbackground=ACC, highlightthickness=1))
         self.ident_desc.bind("<FocusOut>", lambda ev, fw=dfrm: fw.config(
             highlightbackground=SUP, highlightthickness=1))
+        # El color es el último campo del recorrido: Enter y Tab dan la vuelta
+        # al primer campo, y la flecha arriba vuelve al campo anterior.
+        # izquierda/derecha se dejan para mover el cursor al editar el texto.
         self.ident_desc.bind("<Return>", lambda ev: (
-            self._ident_mov(len(self.ident_ents) - 1, +1, True), "break"))
+            self._ident_foco_primero(), "break"))
+        self.ident_desc.bind("<Tab>", lambda ev: (
+            self._ident_foco_primero(), "break"))
+        self.ident_desc.bind("<Up>", lambda ev: (
+            self._ident_foco_ultimo(), "break"))
+        self.ident_desc.bind("<Down>", lambda ev: (
+            self._ident_foco_primero(), "break"))
         self.ident_desc.bind("<KeyRelease>", lambda ev: (self._ajustar_desc(),
                                                          self._refresh()))
         self.ident_desc.bind("<Configure>", self._ajustar_desc)
@@ -441,21 +481,40 @@ class App(tk.Tk):
 
     # ---------------- navegación entre campos ----------------
     def _ident_mov(self, idx, d, wrap=False):
-        """Desplaza el foco entre los campos de identificación."""
+        """Desplaza el foco entre los campos de identificación.
+
+        El color va después del último campo y es un Text, no un Entry, así
+        que llegar al final del último Entry salta siempre al color. La vuelta
+        al primer campo se hace desde el propio color, no desde el campo
+        anterior: antes el Enter de la profundidad daba la vuelta y se saltaba
+        el color.
+        """
         n = len(self.ident_ents)
         if d > 0:
             if idx >= n - 1:
-                if wrap:
-                    self.ident_ents[0].focus_set()
-                    self._ident_sel(self.ident_ents[0])
-                else:
-                    self.ident_desc.focus_set()
-                    self._ident_sel_txt()
+                self._ident_foco_txt()
                 return
             ni = idx + 1
         else:
             ni = max(idx - 1, 0)
         e = self.ident_ents[ni]
+        e.focus_set()
+        self._ident_sel(e)
+
+    def _ident_foco_txt(self):
+        """Foco en el campo de color, con el texto seleccionado."""
+        self.ident_desc.focus_set()
+        self._ident_sel_txt()
+
+    def _ident_foco_primero(self):
+        """Vuelta al primer campo (fin del recorrido del formulario)."""
+        e = self.ident_ents[0]
+        e.focus_set()
+        self._ident_sel(e)
+
+    def _ident_foco_ultimo(self):
+        """Vuelta al último Entry, que es justo antes del color."""
+        e = self.ident_ents[-1]
         e.focus_set()
         self._ident_sel(e)
 
@@ -470,7 +529,8 @@ class App(tk.Tk):
 
     def _ident_sel_txt(self):
         try:
-            self.ident_desc.tag_add("sel", "1.0", "end")
+            self.ident_desc.tag_add("sel", "1.0", "end-1c")
+            self.ident_desc.mark_set("insert", "end-1c")
         except tk.TclError:
             pass
 
@@ -502,6 +562,98 @@ class App(tk.Tk):
         return {"hum": self.hum.leer(), "ll": lim["ll"],
                 "ll_np": self.lim.sin_plasticidad(), "lp": lim["lp"],
                 "grano": self.grano.leer()}
+
+    def _ident_dict(self):
+        """Identificación como diccionario (no como lista de rótulos)."""
+        d = {k: v.get().strip() for k, v in self.idvars.items()}
+        d["descripcion"] = self.ident_desc.get("1.0", "end-1c").strip()
+        return d
+
+    # ---------------- muestra: archivo de la muestra ----------------
+    #: Claves de un archivo de muestra y su tipo, para validar al cargar.
+    _CLAVES_MUESTRA = {
+        "hum": dict, "ll": list, "lp": list, "ll_np": bool,
+        "grano": dict, "ident": dict,
+    }
+
+    def _aplicar_muestra(self, datos, ident):
+        """Vuelca una muestra en la interfaz (datos + identificación)."""
+        for sec in (self.hum, self.lim, self.grano):
+            sec.cargar(datos)
+        for k, v in self.idvars.items():
+            v.set("" if ident.get(k) is None else str(ident[k]))
+        self.ident_desc.delete("1.0", "end")
+        self.ident_desc.insert("1.0", ident.get("descripcion") or "")
+        self._ajustar_desc()
+        self._refresh()
+
+    def _guardar_muestra(self):
+        """Guarda la muestra en un archivo .json eligiendo la ubicación."""
+        datos = self._datos()
+        ident = self._ident_dict()
+        if ident.get("proyecto") or ident.get("muestra"):
+            base = "GRAD-PLAS_muestra%s" % (ident["muestra"] or "")
+        else:
+            base = "GRAD-PLAS_muestra"
+        path = filedialog.asksaveasfilename(
+            title="Guardar muestra", defaultextension=".json",
+            filetypes=[("Muestra GRAD-PLAS", "*.json")],
+            initialfile=base + ".json",
+            initialdir=os.path.expanduser("~/Desktop"))
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump({"formato": "GRAD-PLAS muestra", "version": 1,
+                           "ident": ident, "datos": datos},
+                          fh, ensure_ascii=False, indent=2)
+        except OSError as e:
+            messagebox.showerror("Guardar muestra",
+                                 "No se pudo escribir el archivo:\n%s" % e)
+            return
+        messagebox.showinfo("Guardar muestra", "Muestra guardada:\n%s" % path)
+
+    def _abrir_muestra(self):
+        """Carga una muestra desde un archivo .json."""
+        path = filedialog.askopenfilename(
+            title="Abrir muestra", filetypes=[("Muestra GRAD-PLAS", "*.json"),
+                                              ("Todos los archivos", "*.*")],
+            initialdir=os.path.expanduser("~/Desktop"))
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                doc = json.load(fh)
+        except (OSError, ValueError) as e:
+            messagebox.showerror(
+                "Abrir muestra",
+                "No se pudo leer el archivo:\n%s\n\nDebe ser un archivo de "
+                "muestra guardado por esta aplicación (.json)." % e)
+            return
+        if not isinstance(doc, dict) or "datos" not in doc:
+            messagebox.showerror(
+                "Abrir muestra",
+                "El archivo no parece una muestra de esta aplicación.\n"
+                "Falta la sección 'datos'.")
+            return
+        datos, ident = doc["datos"], doc.get("ident", {})
+        faltan = [k for k, t in self._CLAVES_MUESTRA.items()
+                  if k != "ident" and not isinstance(datos.get(k), t)]
+        if faltan or not isinstance(ident, dict):
+            messagebox.showerror(
+                "Abrir muestra",
+                "El archivo está incompleto o dañado.\nFalta o no corresponde: "
+                "%s." % ", ".join(faltan + (["ident"] if faltan else [])))
+            return
+        # Las filas de los ensayos pueden venir de un archivo más antiguo o
+        # editado a mano: se recorta al número de casillas que hay en pantalla.
+        for k, n in (("ll", 3), ("lp", 2)):
+            filas = datos[k]
+            datos[k] = filas[:n] + [{} for _ in range(max(0, n - len(filas)))]
+        pesos = datos["grano"].get("pesos") or []
+        datos["grano"]["pesos"] = list(pesos[:11]) + [None] * max(0, 11 - len(pesos))
+        self._aplicar_muestra(datos, ident)
+        messagebox.showinfo("Abrir muestra", "Muestra cargada:\n%s" % path)
 
     def _ident(self):
         out = []

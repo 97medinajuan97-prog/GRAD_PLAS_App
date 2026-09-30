@@ -158,18 +158,14 @@ class Granulometria(Seccion):
         self.peso_vars = [tk.StringVar() for _ in SIEVES[:-1]]
         self.registrar(*self.peso_vars)
         self.v_res = [[tk.StringVar() for _ in range(3)] for _ in range(12)]
-        self.v_d60, self.v_d30, self.v_d10 = (tk.StringVar() for _ in range(3))
-        self.v_cu, self.v_cc = tk.StringVar(), tk.StringVar()
-        self.v_grava, self.v_arena, self.v_finos = (tk.StringVar() for _ in range(3))
 
         self._build_pesos()
         self._build_cuerpo()
-        self._build_resumen()
         self._bind_navegacion()
 
         self.aviso_lbl = tk.Label(self, text="", foreground="#a0432e",
                                   bg=CARD, font=(FAM_UI, 9, "bold"))
-        self.aviso_lbl.grid(row=6, column=0, sticky="e", padx=2, pady=(6, 0))
+        self.aviso_lbl.grid(row=2, column=0, sticky="e", padx=2, pady=(6, 0))
         self._aviso_tip = ToolTip(self.aviso_lbl, "")
 
         self.columnconfigure(0, weight=1)
@@ -239,72 +235,6 @@ class Granulometria(Seccion):
                 frm, num = self.caja(tabla, self.v_res[i][c],
                                      editable=False, ancho=8)
                 frm.grid(row=r, column=3 + c, sticky="ew", padx=2, pady=2)
-
-    # ---------------- resumen: D60/D30/D10, Cu/Cc, grava/arena/finos --------
-    def _build_resumen(self):
-        sep = tk.Frame(self, bg=SUP, height=1)
-        sep.grid(row=2, column=0, sticky="ew", pady=(8, 6))
-
-        tab = tk.Frame(self, bg=CARD)
-        tab.grid(row=3, column=0, sticky="ew", pady=(0, 6))
-        for c in range(3):
-            tab.columnconfigure(c, weight=1, uniform="gresum")
-
-        def celda(fila_r, col, simbolo, var, unidad=""):
-            cel = tk.Frame(tab, bg=CARD)
-            cel.grid(row=fila_r, column=col, sticky="ew", padx=(0, 14),
-                     pady=(0, 2) if fila_r < 2 else (0, 0))
-            cel.columnconfigure(0, minsize=80)
-            cel.columnconfigure(1, weight=1)
-            lbl = tk.Frame(cel, bg=CARD)
-            lbl.grid(row=0, column=0, sticky="w")
-            tk.Label(lbl, text=simbolo, font=(FAM_UI, 10), fg=TXT,
-                     bg=CARD).pack(side="left")
-            if unidad:
-                tk.Label(lbl, text=" (%s)" % unidad, font=(FAM_UI, 10),
-                         fg=MUT, bg=CARD).pack(side="left")
-            if var is not None:
-                frm, num = self.caja(cel, var, editable=False)
-                frm.grid(row=0, column=1, sticky="ew", padx=(6, 0))
-
-        for c, (sim, var, uni) in enumerate((
-                ("D60", self.v_d60, "mm"), ("D30", self.v_d30, "mm"),
-                ("D10", self.v_d10, "mm"))):
-            celda(0, c, sim, var, uni)
-        for c, (sim, var, uni) in enumerate((("Cu", self.v_cu, ""),
-                                             ("Cc", self.v_cc, ""))):
-            celda(1, c, sim, var, uni)
-        for c, (sim, var, uni) in enumerate((
-                ("Grava", self.v_grava, "%"), ("Arena", self.v_arena, "%"),
-                ("Finos", self.v_finos, "%"))):
-            celda(2, c, sim, var, uni)
-
-        fila = tk.Frame(self, bg=CARD)
-        fila.grid(row=4, column=0, sticky="w", pady=(4, 0))
-        tk.Label(fila, text="Clase:", bg=CARD, fg=TXT,
-                 font=(FAM_UI, 10)).pack(side="left")
-        self.tipo_lbl = tk.Label(fila, text="—", bg=CARD, fg=TXT,
-                                 font=(FAM_UI, 10))
-        self.tipo_lbl.pack(side="left", padx=(2, 16))
-        tk.Label(fila, text="SUCs:", bg=CARD, fg=TXT,
-                 font=(FAM_UI, 10)).pack(side="left")
-        self.sucs_lbl = tk.Label(fila, text="—", bg=CARD, fg=TXT,
-                                 font=(FAM_UI, 10, "bold"))
-        self.sucs_lbl.pack(side="left", padx=(2, 0))
-
-        self.sucs_desc = tk.Label(self, text="", bg=CARD, fg=MUT,
-                                  font=(FAM_UI, 9), anchor="w",
-                                  justify="left", wraplength=390)
-        self.sucs_desc.grid(row=5, column=0, sticky="ew", padx=2, pady=(2, 0))
-
-    def _celda_res(self, parent, var, simbolo, unidad):
-        fr = tk.Frame(parent, bg=CARD)
-        fr.pack(side="left", padx=(0, 14))
-        tk.Label(fr, text=simbolo, font=(FAM_UI, 10), fg=MUT,
-                 bg=CARD).pack(side="left")
-        frm, num = self.caja(fr, var, unidad, editable=False)
-        frm.pack(side="left", padx=(6, 0))
-        return num
 
     # ---------------- casillas y teclado ----------------
     def caja(self, parent, var, unidad="", editable=True, ancho=7):
@@ -394,35 +324,6 @@ class Granulometria(Seccion):
             self.v_fondo.set("%.2f" % f)
             self._fondo_num.config(fg=TXT)
 
-        for var, key in ((self.v_d60, "D60"), (self.v_d30, "D30"),
-                         (self.v_d10, "D10")):
-            v = res.get(key)
-            var.set("—" if v is None else "%.2f" % v)
-        for var, key in ((self.v_cu, "Cu"), (self.v_cc, "Cc")):
-            v = res.get(key)
-            var.set("—" if v is None else "%.2f" % v)
-        # Se leen las claves de composición ya redondeadas por el motor
-        # (g_*_1d): son las mismas que imprime la tabla del PDF, así que lo
-        # que se ve en pantalla y lo que sale en papel coinciden al dígito.
-        for var, key in ((self.v_grava, "g_grava_1d"), (self.v_arena, "g_arena_1d"),
-                         (self.v_finos, "g_finos_1d")):
-            v = res.get(key)
-            var.set("—" if v is None else "%.1f" % v)
-
-        tipo = res.get("tipo")
-        if tipo:
-            self.tipo_lbl.config(text=tipo, foreground=TXT)
-        else:
-            self.tipo_lbl.config(text="—", foreground=MUT)
-
-        sucs = res.get("sucs")
-        sucs_db = res.get("sucs_desc")
-        if sucs:
-            self.sucs_lbl.config(text=sucs, foreground=TXT)
-        else:
-            self.sucs_lbl.config(text="—", foreground=MUT)
-        self.sucs_desc.config(text=sucs_db or "")
-
         corto, detalle = aviso_incoherencia(self.leer()["pesos"], gt)
         if not corto:
             # Se avisa sobre los valores mostrados (los redondeados), que son
@@ -451,11 +352,5 @@ class Granulometria(Seccion):
         for row in self.v_res:
             for v in row:
                 v.set("—")
-        for v in (self.v_d60, self.v_d30, self.v_d10, self.v_cu, self.v_cc,
-                  self.v_grava, self.v_arena, self.v_finos):
-            v.set("—")
-        self.tipo_lbl.config(text="—", foreground=MUT)
-        self.sucs_lbl.config(text="—", foreground=MUT)
-        self.sucs_desc.config(text="")
         self.aviso_lbl.config(text="")
         self._aviso_tip.set_text("")

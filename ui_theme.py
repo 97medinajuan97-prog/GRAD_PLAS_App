@@ -49,6 +49,115 @@ def validar_tecla(root, tipo="decimal"):
     return root.register(cmd)
 
 
+#: Pasos de deshacer que recuerda cada casilla de ingreso.
+MAX_DESHACER = 100
+
+
+def con_deshacer(w):
+    """Habilita Ctrl+Z (deshacer) y Ctrl+Y / Ctrl+Mayús+Z (rehacer) en una
+    casilla de entrada.
+
+    Tk solo ofrece historial para `Text`, no para `Entry`, así que se lleva
+    una pila de instantáneas a mano.
+
+    Los pasos se AGRUPAN por entrada, no por tecla: escribir "600" es un solo
+    paso y un Ctrl+Z lo borra entero. Se sigue escribiendo mientras el valor
+    nuevo sea el anterior seguido de caracteres más; cualquier otra edición
+    (borrar, corregir en medio, pegar) cierra el paso y abre uno nuevo.
+    """
+    pila = []            # valores a los que se puede volver
+    redo = []            # valores a los que se puede rehacer
+    grupo = [None]       # valor previo al paso de escritura en curso
+    actual = [None]
+
+    def _leer():
+        try:
+            return w.get()
+        except tk.TclError:
+            return ""
+
+    def _escribir(txt):
+        try:
+            w.delete(0, "end")
+            w.insert(0, txt)
+        except tk.TclError:
+            pass
+        actual[0] = txt
+
+    def _sigue_escribiendo(a, b):
+        return len(b) > len(a) and b.startswith(a)
+
+    def _push(*_):
+        v = _leer()
+        if actual[0] is None:
+            actual[0] = v          # primera medición, no es un cambio
+            return
+        prev = actual[0]
+        if v == prev:
+            return
+        if grupo[0] is None:
+            grupo[0] = prev        # empieza un paso de escritura
+        elif not _sigue_escribiendo(prev, v):
+            pila.append(grupo[0])  # se cerró el paso: se archiva su origen
+            del pila[:-MAX_DESHACER]
+            grupo[0] = prev
+            del redo[:]            # lo que se iba a rehacer ya no vale
+        actual[0] = v
+
+    def _deshacer(*_):
+        destino = None
+        if grupo[0] is not None and grupo[0] != actual[0]:
+            destino = grupo[0]     # el paso de escritura que está en curso
+        elif pila:
+            destino = pila.pop()
+        if destino is None:
+            return "break"
+        redo.append(actual[0])
+        grupo[0] = None
+        _escribir(destino)
+        return "break"
+
+    def _rehacer(*_):
+        if not redo:
+            return "break"
+        grupo[0] = None
+        _escribir(redo.pop())
+        return "break"
+
+    actual[0] = _leer()
+    w.bind("<KeyRelease>", _push, add="+")
+    for seq in ("<Control-z>", "<Control-Z>", "<Control-KeyPress-z>"):
+        w.bind(seq, _deshacer, add="+")
+    for seq in ("<Control-y>", "<Control-Y>",
+                "<Control-Shift-Z>", "<Control-Shift-z>"):
+        w.bind(seq, _rehacer, add="+")
+    return w
+
+
+def _entradas(w):
+    """Recorre el árbol de widgets y devuelve todas las casillas de entrada."""
+    for c in w.winfo_children():
+        if isinstance(c, (tk.Entry, ttk.Entry)):
+            yield c
+        for x in _entradas(c):
+            yield x
+
+
+def habilitar_deshacer(root):
+    """Activa Ctrl+Z / Ctrl+Y en todas las casillas de ingreso de la ventana.
+
+    Se hace un solo recorrido del árbol en lugar de tocar cada fábrica de
+    entradas, para que ningún campo nuevo quede sin deshacer por olvido. Es
+    idempotente: una casilla que ya tiene el enlace no se vuelve a tocar.
+    """
+    n = 0
+    for w in _entradas(root):
+        if not w.bind("<Control-z>"):
+            con_deshacer(w)
+            n += 1
+    return n
+
+
 def aplicar_estilo(root):
     s = ttk.Style(root)
     try:
