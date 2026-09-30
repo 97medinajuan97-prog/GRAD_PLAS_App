@@ -360,6 +360,16 @@ def _desc_material(datos, res, ident):
         "Arcillas de plasticidad alta, de color café oscuro con vetas grises"
 
     Si no hay color, se imprime solo la descripción automática.
+
+    Toda la línea va en mayúsculas, como las demás celdas de datos del
+    encabezado. El texto es una ficha del material, no una frase de lectura
+    corrida: en minúsculas mezclaba "Grava limosa no plástica, de color café
+    claro" con etiquetas como "PROYECTO" o "DESCRIPCIÓN MATERIAL" en caja alta,
+    y se veía como si el valor fuera de otra fuente.
+
+    La capitalización va al final, sobre la cadena completa, y no sobre el
+    `auto` de `descripcion_sucs`: si se hiciera antes de encadenar el color, el
+    "De color %s" perdería su mayúscula inicial y quedaría "DE COLOR café".
     """
     from motor.clasificacion import descripcion_sucs
     color = (_id_campo(datos, ident, "descripcion") or "").strip()
@@ -369,8 +379,11 @@ def _desc_material(datos, res, ident):
         # `descripcion_sucs` ya cierra con punto; se quita para poder encadenar
         # la coma sin dejar "areno-gravosas., de color ...".
         auto = auto.rstrip(" .;,")
-        return "%s, de color %s" % (auto, color) if auto else "De color %s" % color
-    return auto
+        texto = ("%s, de color %s" % (auto, color) if auto
+                 else "De color %s" % color)
+    else:
+        texto = auto
+    return texto.upper()
 
 
 def _profundidad(datos, ident):
@@ -586,11 +599,20 @@ def ty_bas(rmid, A, D, SIZE):
 
 
 def _dib_desc_linea(c, linea, fn, fnb, size, px, ty, maxw, sucs):
-    """Dibuja una línea de descripción con la clasificación SUCs en negrita."""
+    """Dibuja una línea de la descripción del material.
+
+    `sucs` se acepta por compatibilidad con llamadas antiguas, pero ya no se
+    usa para nada: el texto que compone `descripcion_sucs` describe el suelo
+    ("GRAVA LIMOSA NO PLÁSTICA, DE COLOR ...") y nunca incluye el símbolo, de
+    modo que buscarlo aquí para ponerlo en negrilla no encontraba nada y toda la
+    línea salía en la fuente normal. La negrilla la aporta la etiqueta
+    "DESCRIPCIÓN MATERIAL" de la izquierda.
+    """
     seg = [(linea, fn)]
-    if sucs and sucs in linea:
-        pos = linea.rfind(sucs)
-        fin = pos + len(sucs)
+    clave = (sucs or "").upper()
+    if clave and clave in linea:
+        pos = linea.rfind(clave)
+        fin = pos + len(clave)
         if fin < len(linea) and linea[fin] == ")":
             fin += 1
         seg = [(linea[:pos], fn), (linea[pos:fin], fnb),
