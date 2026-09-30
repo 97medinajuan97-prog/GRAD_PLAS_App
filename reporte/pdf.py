@@ -231,7 +231,7 @@ def _dibujar_header(c, box, fn, fnb):
             maxw = bw - 12.0
             renglones = ("HUMEDAD NATURAL \u2014 INV E-122  \u00b7  "
                          "GRANULOMETR\u00cdA \u2014 INV E-123",
-                         "L\u00cdMITES \u2014 INV E-125 / E-126")
+                         "L\u00cdMITES DE ATTERBERG \u2014 INV E-125 / E-126")
             ENS_SIZE = 7.0
             while ENS_SIZE > 5.5 and max(c.stringWidth(r, fnb, ENS_SIZE)
                                          for r in renglones) > maxw:
@@ -312,6 +312,21 @@ def _id_campo(datos, ident, key):
     return ""
 
 
+def _desc_material(datos, res, ident):
+    """Descripción material del reporte.
+
+    Antepone el texto libre del usuario y, si no está ya, le sigue la frase
+    descriptiva que deriva de la clasificación SUCs (`descripcion_sucs`), que
+    characterize el suelo sin repetir porcentajes ni coeficientes.
+    """
+    from motor.clasificacion import descripcion_sucs
+    txt = (_id_campo(datos, ident, "descripcion") or "").strip()
+    auto = descripcion_sucs(res) if isinstance(res, dict) else ""
+    if auto and _normalizar(auto) not in _normalizar(txt):
+        txt = (txt + " " + auto).strip() if txt else auto
+    return txt
+
+
 def _profundidad(datos, ident):
     """Profundidad con formato '10.00 m a 10.60 m'.
 
@@ -382,7 +397,7 @@ def _rohs_project_info(datos, res, ident):
 
     proy = _id_campo(datos, ident, "proyecto")
     orden = _id_campo(datos, ident, "ordenado")
-    desc = _id_campo(datos, ident, "descripcion")
+    desc = _desc_material(datos, res, ident)
 
     def roh(larga, txto):
         if not larga:
@@ -445,7 +460,7 @@ def _dibujar_project_info(c, box, fn, fnb, datos, res, ident):
     f_toma = _id_campo(datos, ident, "fecha_toma")
     f_ejec = _id_campo(datos, ident, "fecha_ejecucion")
     prof = _profundidad(datos, ident)
-    desc = _id_campo(datos, ident, "descripcion")
+    desc = _desc_material(datos, res, ident)
 
     filas = [
         # (es_larga, celdas)

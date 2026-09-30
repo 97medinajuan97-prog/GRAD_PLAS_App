@@ -153,26 +153,15 @@ def _filas_lp(LL, IP):
 
 def _fecha(base, det):
     d = base + datetime.timedelta(days=det)
-    return "%d/%d/%d" % (d.month, d.day, d.year)
+    return "%02d/%02d/%d" % (d.day, d.month, d.year)
 
 
 def _descripcion(comp, ll_np):
-    s = comp
-    tipo = s["tipo"] or "SUELO"
-    txto = "Suelo %s" % tipo.lower()
-    nomb = s["desc"] or s["sucs"] or "sin clasificar"
-    if s["sucs"] and "-" in s["sucs"]:
-        nomb = "símbolo doble " + s["sucs"]
-    txto += ": %s (%s)." % (nomb, s["sucs"])
-    if tipo == "GRANULAR" and s["finos"] is not None:
-        txto += " %d%% grava, %d%% arena, %d%% finos; Cu=%.1f, Cc=%.2f." % (
-            round(s["grava"]), round(s["arena"]), round(s["finos"]),
-            s["cu"] or 0.0, s["cc"] or 0.0)
-    if tipo == "FINO":
-        txto += " %d%% pasa el tamiz N° 200." % round(s["finos"])
-    if ll_np:
-        txto += " Material no plástico (NP)."
-    return txto
+    from motor.clasificacion import descripcion_sucs
+    return descripcion_sucs({
+        "sucs": comp["sucs"], "g_grava": comp["grava"],
+        "g_arena": comp["arena"], "ll_np": ll_np,
+    })
 
 
 def _construir(entrada):

@@ -221,7 +221,8 @@ class App(tk.Tk):
             "Ordenado por: técnico que solicitó el ensayo.",
             "Perforación N°: sondeo o apique del que proviene la muestra."
             "Muestra N°: número de la muestra ensayada.",
-            "Fecha de toma / Fecha de ejecución: cuándo se tomó y se ensayó.",
+            "Fecha de toma / Fecha de ejecución: cuándo se tomó y se ensayó, "
+            "en formato DD/MM/AAAA. También se puede elegir con el calendario.",
             "Profundidad (m): rango de profundidad del muestreo (a): inicio, "
             "b): fin. Permite N.A. (no aplica).",
             "Descripción material: texto libre con la descripción visual del "
@@ -281,7 +282,7 @@ class App(tk.Tk):
         return P == "" or re.fullmatch(r"[A-Za-z0-9 .\-/_()]+", P) is not None
 
     def _val_fecha(self, P):
-        """Fecha M/D/AAAA: solo dígitos y / o -"""
+        """Fecha DD/MM/AAAA: solo dígitos y / o -"""
         return P == "" or all(c.isdigit() or c in "/-" for c in P)
 
     def _val_prof(self, P):
@@ -338,7 +339,7 @@ class App(tk.Tk):
         def fecha_actual():
             v = self._fmt_fecha(var.get().strip())
             try:
-                m, d, y = v.split("/")
+                d, m, y = v.split("/")
                 return datetime.date(int(y), int(m), int(d))
             except Exception:
                 return None
@@ -379,7 +380,7 @@ class App(tk.Tk):
                 celdas.append(b)
 
         def seleccionar(d):
-            var.set("%d/%d/%d" % (d.month, d.day, d.year))
+            var.set("%02d/%02d/%d" % (d.day, d.month, d.year))
             top.destroy()
 
         def pintar():
@@ -403,7 +404,7 @@ class App(tk.Tk):
 
         pie = tk.Frame(top, bg=CARD)
         pie.pack(fill="x", padx=6, pady=(0, 6))
-        tk.Button(pie, text="Hoy  %s" % hoy.strftime("%m/%d/%Y"), bg=ACC,
+        tk.Button(pie, text="Hoy  %s" % hoy.strftime("%d/%m/%Y"), bg=ACC,
                   fg="#ffffff", activebackground=ACC_D, relief="flat",
                   font=(FAM_SERIF, 9, "bold"),
                   command=lambda: seleccionar(hoy)).pack(fill="x", ipady=1)
