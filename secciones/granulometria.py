@@ -36,6 +36,23 @@ N_TAMICES = len(SIEVES) - 1
 POS_1_2 = next(i for i, (t, _) in enumerate(SIEVES) if t == '1/2"')
 DIAM = [d for _, d in SIEVES]
 
+def _indice(tamiz):
+    """Posición de un tamiz por su nombre.
+
+    Los tamices clave se buscan por nombre y no por número de posición: al
+    agregar el 1/2" todos los índices fijos corridos y %pasa N°4 quedaba leyendo
+    el 3/8", %pasa N°200 el N°40, y con ellos la grava, la arena, los finos, el
+    tipo de suelo y las clasificaciones SUCs y AASHTO. Buscando por nombre, un
+    cambio en la lista ya no puede desalinear nada en silencio.
+    """
+    return SIEVES.index(next(s for s in SIEVES if s[0] == tamiz))
+
+#: índices de los tamices que definen fracciones y grupos, por nombre.
+I_N4 = _indice('N° 4')
+I_N10 = _indice('N° 10')
+I_N40 = _indice('N° 40')
+I_N200 = _indice('N° 200')
+
 
 def calcular_granulometria(d):
     """d: {'total': texto|None, 'pesos': N_TAMICES pesos retenidos}.
@@ -91,7 +108,8 @@ def calcular_granulometria(d):
     cc = (d30 ** 2 / (d60 * d10)
           if (d60 and d30 is not None and d10 is not None and d60 * d10 > 0) else None)
 
-    F4, F200 = F[7], F[10]
+    # Por nombre, no por posición: ver `_indice`.
+    F4, F200 = F[I_N4], F[I_N200]
     grava = (100 - F4) if F4 is not None else None
     arena = (F4 - F200) if (F4 is not None and F200 is not None) else None
     tipo = ("GRANULAR" if F200 <= 35 else "FINO") if F200 is not None else None
@@ -100,7 +118,7 @@ def calcular_granulometria(d):
         "fondo": fondo, "sum_ret": sumw, "sieve": sieve, "F": F,
         "d60": d60, "d30": d30, "d10": d10, "cu": cu, "cc": cc,
         "grava": grava, "arena": arena, "finos": F200, "tipo": tipo,
-        "f4": F4, "f10": F[8], "f40": F[9], "f200": F200,
+        "f4": F4, "f10": F[I_N10], "f40": F[I_N40], "f200": F200,
     }
 
 

@@ -148,6 +148,13 @@ def calcular(data):
     # lo diga en vez de mostrar un guion mudo.
     res["aashto_faltan"] = [] if gpo else aashto_faltantes(
         g["f10"], g["f40"], Fn, ll_aa, pi_aa)
+    # SUCs también puede quedar sin emitir por falta de datos; se anota por qué
+    # para que la interfaz no muestre un guion mudo.
+    if not res["sucs"]:
+        res["sucs_faltan"] = ([] if Fn is None else
+                              (["LL e IP"] if not res["ll_np"] else ["granulometría"]))
+    else:
+        res["sucs_faltan"] = []
 
     # ---- verificaciones ----
     res["checks"] = verificaciones(data, res, g)

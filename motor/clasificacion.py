@@ -27,6 +27,13 @@ def clasificar(Fn, Gp, An, CU, CC, LL2, PI2, np_=False):
 
     `np_` indica muestra no plástica (LL/IP indeterminados, NP): sus finos se
     asumen no plásticos, por lo que la letra de plasticidad es "M" (limo).
+
+    Sin LL o sin IP el símbolo no se emite si hace falta la letra de
+    plasticidad: "M" y "C" se distinguen justo por la línea A, que depende de
+    LL y de IP, así que con uno de los dos faltando no hay dato para decidir y
+    emitir ML o GM sería un resultado inventado. En los grupos limpios
+    (%pasa N°200 < 5) la letra no interviene, así que GW/GP/SW/SP sí se emiten
+    sin plasticidad, que es lo que ASTM D2487 pide.
     """
     plastic = (not np_) and (LL2 is not None) and (PI2 is not None)
     if plastic:
@@ -34,6 +41,9 @@ def clasificar(Fn, Gp, An, CU, CC, LL2, PI2, np_=False):
         letra = "C" if (PI2 > Alinea and PI2 >= 4) else "M"
     else:
         letra = "M"
+    # La letra entra en el símbolo desde %pasa N°200 >= 5. Antes de ese valor el
+    # símbolo es solo el grupo limpio y no depende de la plasticidad.
+    letra_indeterminada = (not plastic) and (not np_) and (Fn is not None) and Fn >= 5
     base = ("G" if Gp >= An else "S") if (Gp is not None and An is not None) else None
     grado = None
     if base is not None and CU is not None and CC is not None:
@@ -41,7 +51,7 @@ def clasificar(Fn, Gp, An, CU, CC, LL2, PI2, np_=False):
             grado = "GW" if (CU >= 4 and 1 <= CC <= 3) else "GP"
         else:
             grado = "SW" if (CU >= 6 and 1 <= CC <= 3) else "SP"
-    if Fn is None:
+    if Fn is None or letra_indeterminada:
         sucs = None
     elif Fn < 5:
         sucs = grado
@@ -253,19 +263,51 @@ def aashto_faltantes(F10, F40, F200, LL, PI):
 
     Lista vacía = clasificable (o ya clasificado). Se usa para que la
     interfaz pueda decir *qué* falta y no limitarse a mostrar un guion.
+
+    Solo se reportan los datos que el camino real de `grupo_aashto` consulta.
+    Por eso no basta con "¿esta lista está vacía?": si el suelo no se clasificó
+    por otra razón, la lista sale vacía y el mensaje queda mudo. Se devuelve
+    entonces "datos de clasificación", que al menos es cierto.
     """
     faltan = []
     if F200 is None:
-        faltan.append("granulometría")
-    if LL is None:
-        faltan.append("LL")
-    if PI is None and not faltan:
-        # Solo tiene sentido si el suelo es plástico: un suelo no plástico
-        # (NP) sí tiene grupo, y se resuelve con PI = 0 aguas arriba.
+        # Sin %pasa N°200 no hay grupo: no se decide nada.
+        return ["granulometría"]
+    if PI is None:
+        # Todos los grupos necesitan el índice de plasticidad.
         faltan.append("IP")
-    if not faltan and F200 <= 35 and F40 is None:
-        faltan.append("granulometría")
+    if F200 <= 35:
+        # A-1-a, A-1-b y A-3 no usan LL; los A-2 sí. Solo se pide LL si el
+        # camino granular se queda en un A-2 (o no sale de A-1/A-3), que es
+        # justo cuando LL hace falta.
+        if LL is None and _necesita_ll(F10, F40, F200, PI):
+            faltan.append("LL")
+        if F40 is None:
+            # A-1-a, A-1-b y A-3 leen F40; los A-2 no. Con F200 <= 35 y sin
+            # F40 no se puede saber si sale de los grupos que no usan LL.
+            faltan.append("granulometría")
+    elif LL is None:
+        # A-4 a A-7 dependen de LL en todos los casos.
+        faltan.append("LL")
     return faltan
+
+
+def _necesita_ll(F10, F40, F200, PI):
+    """Con %pasa N°200 <= 35, ¿el grupo cae en un A-2 (que usa LL)?
+
+    Cada comparación va con `_le` o con la guarda de `None` que corresponda: si
+    un dato falta, la condición es falsa y se concluye que sí hace falta LL, que
+    es lo prudente (se pide un dato que quizá no era el único que faltaba).
+    """
+    if PI is None:
+        return True
+    if _le(F10, 50) and _le(F40, 30) and F200 <= 15 and PI <= 6:
+        return False                       # A-1-a
+    if _le(F40, 50) and F200 <= 25 and PI <= 6:
+        return False                       # A-1-b
+    if F40 is not None and F40 > 50 and F200 <= 10 and PI <= 0:
+        return False                       # A-3
+    return True
 
 
 def indice_grupo(F200, LL, PI):
