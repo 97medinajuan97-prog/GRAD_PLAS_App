@@ -45,6 +45,12 @@ class App(tk.Tk):
         self._preview_after = None
         self._datos_actuales = None
         self._res_actuales = None
+        #: True mientras `_sincronizar_alcance` está en marcha. Al cambiar de
+        #: alcance se repuebla la lista de graduaciones, y eso dispara la traza
+        #: de `sel_graduacion`. Sin este candado, esa traza refrescaría el
+        #: reporte antes de que se haya cambiado la serie de tamices: la curva
+        #: saldría de otra muestra y la graduación sería la nueva.
+        self._sinc_seleccion = False
 
         self._build()
 
@@ -423,14 +429,23 @@ class App(tk.Tk):
         #: se está dejando, y se acabaría guardando BG-27 como si fuera la
         #: graduación de Afirmados.
         self._familia_grad = ""
-        self.sel_alcance.var.trace_add(
-            "write", lambda *a: self._sincronizar_alcance())
 
+        # Los tres selectores alimentan el reporte, así que los tres tienen que
+        # rehacer la vista previa. Antes solo se sincronizaba la lista de
+        # graduaciones y la serie de tamices: el "reporte en vivo" se quedaba
+        # congelado con los datos anteriores hasta que se escribiera en otro
+        # campo. "Guardar PDF" sí salía bien, porque recalcula desde cero.
+        #
         # `trace` en vez de un comando: si la variable cambia por cualquier vía
-        # (cargar una muestra, restaurar un archivo) el selector se muestra o se
-        # esconde igual, y no queda desincronizado con la lista de alcances.
+        # (elegir en el desplegable, cargar una muestra, restaurar un archivo)
+        # pasa por aquí igual, y el selector no queda desincronizado con la
+        # lista de alcances.
         self.sel_tipo.var.trace_add(
-            "write", lambda *a: self._sincronizar_alcance())
+            "write", lambda *a: self._cambio_de_seleccion())
+        self.sel_alcance.var.trace_add(
+            "write", lambda *a: self._cambio_de_seleccion())
+        self.sel_graduacion.var.trace_add(
+            "write", lambda *a: self._cambio_de_seleccion())
         self._sincronizar_alcance()
 
         # Se guarda la referencia para poder insertar el alcance antes de la
@@ -502,6 +517,38 @@ class App(tk.Tk):
         if grano is not None:
             grano.set_serie(serie_para(
                 self.TIPO_CC if es_cc else self.TIPO_SUELOS, alcance))
+
+    def _cambio_de_seleccion(self, *_):
+        """Reface el reporte cuando se mueve el tipo, el alcance o la graduación.
+
+        Los tres van al mismo sitio por dos caminos: los tres alimentan el
+        bloque `ident` que lee el reporte, y el alcance además cambia la serie
+        de tamices, con lo que también cambia la curva.
+
+        Se pasa siempre por `_sincronizar_alcance`, incluso al cambiar solo la
+        graduación. Es inocuo: si el alcance no ha cambiado, no repuebla la lista
+        (el bloque está guardado por `self._familia_grad`) y `set_serie` sale
+        temprano porque la serie es la misma. Así una graduación elegida a mano
+        no la pisa nadie.
+
+        El candado evita el refresco a destiempo: al cambiar de alcance se
+        repuebla la lista de graduaciones, y eso dispara la traza de
+        `sel_graduacion`. Sin candado, esa traza refrescaría antes de que se
+        haya aplicado la serie nueva de tamices.
+        """
+        if self._sinc_seleccion:
+            return
+        self._sinc_seleccion = True
+        try:
+            self._sincronizar_alcance()
+        finally:
+            self._sinc_seleccion = False
+        # En el primer llamado del build la sección de granulometría todavía no
+        # existe, y `_datos` la usaría. Se comprueba en vez de confiar en el
+        # orden, porque el orden es justo lo que no conviene hacer depender de
+        # un detalle así. Igual que dentro de `_sincronizar_alcance`.
+        if getattr(self, "grano", None) is not None:
+            self._refresh()
 
     @staticmethod
     def _empacar(caja, visible):
@@ -1299,6 +1346,12 @@ class App(tk.Tk):
             # aire alrededor de la hoja, para que no quede pegada al borde.
             # Con `expand=True` la hoja queda centrada en el panel: pegada al
             # borde izquierdo se veía descuadrada al abrir la app.
+            #
+            # El desplazamiento del visor no hay que guardarlo ni devolverlo
+            # después: al destruir y recrear las etiquetas dentro de la MISMA
+            # llamada, el bucle de eventos no llega a ver el área vacía y Tk
+            # conserva la posición de lectura. Si algún día se rehiciera el
+            # visor en dos vueltas del bucle, eso dejaría de ser cierto.
             lab = tk.Label(self.report_area, image=img, bg=FONDO_VISOR,
                            highlightthickness=1, highlightbackground=BORDE_HOJA)
             lab.pack(side="top", expand=True,
