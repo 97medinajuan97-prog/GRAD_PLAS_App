@@ -836,8 +836,16 @@ class App(tk.Tk):
         return P == "" or P.isprintable()
 
     def _val_nombre(self, P):
-        """Nombre propio: solo letras (con acentos), espacios y . -"""
-        return P == "" or re.fullmatch(r"[A-Za-zÁÉÍÓÚÑÜáéíóúñü .'-]+", P) is not None
+        """Nombre propio: letras, espacios y . - , y también números.
+
+        Se aceptan números porque en la orden de trabajo cabe tanto el nombre
+        de quien solicita el ensayo como su cédula, un lote o un número de
+        contrato, y anotar "4547392" no es un nombre pero sí un dato válido del
+        mismo campo.
+        """
+        if P == "":
+            return True
+        return re.fullmatch(r"[A-Za-zÁÉÍÓÚÑÜáéíóúñü0-9 .'\-]+", P) is not None
 
     def _val_alfanum(self, P):
         """Texto alfanumérico (permite N.A.)."""

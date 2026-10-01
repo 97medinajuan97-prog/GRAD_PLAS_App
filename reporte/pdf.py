@@ -47,6 +47,15 @@ _GR_BAND_VH = 13.0                    # altura de las filas de datos de la banda
 _GR_BAND_PAD = 2.0                    # aire superior/inferior de la banda
 _GR_BAND_H = 2 * _GR_BAND_VH + 2 * _GR_BAND_PAD
 
+#: Aire extra entre la sección de granulometría y la curva.
+#:
+#: Con el GAP general de 5 pt, la banda de parámetros (W1/W2, Cu/Cc) y la tabla
+#: de denominaciones de la curva (GRAVA | ARENA | LIMO Y ARCILLA) quedaban a
+#: 10 pt, y se leían como un solo bloque de líneas. Ninguna de las dos cajas
+#: se invade, pero la separación no alcanza para decir dónde acaba una y
+#: empieza la otra. Este aire va entre las dos, no dentro de ninguna.
+_GR_CHART_GAP = 12.0
+
 
 def _alturas_gr(res):
     """Alto de la sección de granulometría para esta muestra.
@@ -207,10 +216,22 @@ def _pilas(ML, MB, CW, CH, gap=GAP, alturas=None):
     # sección del cuerpo y las firmas.
     tope = MB + CH
     offset = 0.0
-    for nombre, desc, hp, h in cuerpo:
-        y = tope - offset - h
+    # El hueco va ANTES de cada sección, y se decide con el par (anterior,
+    # esta). La primera sección va pegada al tope, sin hueco.
+    #
+    # Importa dónde se acumula: si el hueco se sumara después de colocar la
+    # sección, estaría valorando el par (esta, siguiente) y el visible sería
+    # el de la anterior, que es justo el que no se quiere cambiar.
+    hueco_antes = 0.0
+    for i, (nombre, desc, hp, h) in enumerate(cuerpo):
+        if i:
+            anterior = cuerpo[i - 1][0]
+            hueco_antes = (_GR_CHART_GAP
+                           if (anterior == "granulometria-block"
+                               and nombre == "grain-size-chart") else gap)
+        y = tope - offset - hueco_antes - h
         pilas.append((nombre, desc, ML, y, CW, h))
-        offset += h + gap
+        offset += h + hueco_antes
     return pilas
 
 
@@ -453,6 +474,13 @@ def _clip(c, txt, font, size, maxw):
     return corte + "\u2026"
 
 
+#: Máximo de renglones de los campos de texto largo de la identificación
+#: (proyecto y descripción del material). Con más renglones la fila crece,
+#: empuja las secciones de abajo y el encuadre deja de ser el mismo entre
+#: muestras: un proyecto con un nombre largo descuadraba el reporte entero.
+MAX_LINEAS_IDENT = 2
+
+
 def _partir(c, txt, font, size, maxw, maxlineas=8):
     """Envuelve `txt` por palabras hasta caber en `maxw` (p. ej. filas
     de texto largo). Devuelve la lista de líneas (acotada a `maxlineas`)."""
@@ -474,6 +502,11 @@ def _partir(c, txt, font, size, maxw, maxlineas=8):
     elif actual:
         lineas[-1] = _clip(c, actual, font, size, maxw)
     return lineas or [""]
+
+
+#: Las dos filas de texto largo van acotadas a MAX_LINEAS_IDENT renglones. Las
+#: de datos pareados (sector, fechas, tipo) no se envuelven.
+_FILA_LARGA = (True, MAX_LINEAS_IDENT)
 
 
 def _filas_ident(datos, res, ident):
@@ -503,19 +536,26 @@ def _filas_ident(datos, res, ident):
     filas = [
         # (es_larga, celdas); los rótulos de las columnas son nombres, no
         # números: las fracciones las pone quien dibuja, con la misma grilla.
-        (True,  [("label", "PROYECTO", 0, "L1"), ("texto", proy, "L1", 1.0)]),
-        (True,  [("label", "ORDENADO POR", 0, "L1"), ("texto", orden, "L1", 1.0)]),
+        # `_FILA_LARGA` es (True, MAX_LINEAS_IDENT): el True dice que la fila
+        # es de texto largo, y el número acota sus renglones.
+        (_FILA_LARGA[0],
+         [("label", "PROYECTO", 0, "L1"), ("texto", proy, "L1", 1.0)],
+         _FILA_LARGA[1]),
+        (_FILA_LARGA[0],
+         [("label", "ORDENADO POR", 0, "L1"), ("texto", orden, "L1", 1.0)],
+         _FILA_LARGA[1]),
         (False, [("label", "SECTOR", 0, "L1"), ("centro", sect, "L1", "L2"),
-                 ("label", "MUESTRA", "L2", "L3"), ("centro", mues, "L3", 1.0)]),
+                 ("label", "MUESTRA", "L2", "L3"), ("centro", mues, "L3", 1.0)], 0),
         (False, [("label", "FECHA DE TOMA", 0, "L1"), ("centro", f_toma, "L1", "L2"),
                  ("label", "FECHA DE EJECUCIÓN", "L2", "L3"),
-                 ("centro", f_ejec, "L3", 1.0)]),
+                 ("centro", f_ejec, "L3", 1.0)], 0),
         (False, [("label", "PERFORACIÓN", 0, "L1"), ("centro", perf, "L1", "L2"),
-                 ("label", "PROFUNDIDAD", "L2", "L3"), ("centro", prof, "L3", 1.0)]),
+                 ("label", "PROFUNDIDAD", "L2", "L3"), ("centro", prof, "L3", 1.0)], 0),
         (False, [("label", "TIPO", 0, "L1"), ("centro", tipo, "L1", "L2")]
-                 + celdas_grad),
-        (True, [("label", "DESCRIPCIÓN MATERIAL", 0, "L1"),
-                ("desc", desc, "L1", 1.0)]),
+                 + celdas_grad, 0),
+        (_FILA_LARGA[0],
+         [("label", "DESCRIPCIÓN MATERIAL", 0, "L1"), ("desc", desc, "L1", 1.0)],
+         _FILA_LARGA[1]),
     ]
     return filas
 
@@ -536,14 +576,17 @@ def _rohs_project_info(datos, res, ident):
     SIZE, R0, LH = 8.0, 12.5, 10.0
     maxw = 468.0 * (1.0 - L1) - 2.0 * PAD
 
-    def roh(larga, txto):
+    def roh(larga, txto, tope):
         if not larga:
             return R0
-        n = max(1, len(_partir(c, txto or "", fn, SIZE, maxw)))
+        # `tope` es el máximo de renglones de la fila. Las de datos pareados no
+        # lo fijan (0) y no se envuelven.
+        n = max(1, len(_partir(c, txto or "", fn, SIZE, maxw,
+                               maxlineas=tope or 8)))
         return max(R0, n * LH + 2.0)
 
-    return [roh(larga, celdas[-1][1])
-            for larga, celdas in _filas_ident(datos, res, ident)]
+    return [roh(larga, celdas[-1][1], tope)
+            for larga, celdas, tope in _filas_ident(datos, res, ident)]
 
 
 def _medir_project_info(datos, res, ident):
@@ -567,6 +610,38 @@ def _alturas(datos, res, ident, CH):
             hs.append(_SECT_H_CHART)
         else:
             hs.append(s[5] / 100.0 * CH)
+    return _repartir_chart(hs, CH)
+
+
+def _repartir_chart(hs, CH):
+    """Deja la separación de la curva como corresponde y le quita el alto.
+
+    `_pilas` apila el cuerpo de arriba abajo y lo que sobra queda entre la
+    última sección y las firmas. Ese sobrante se iba a un solo sitio y la
+    separación extra entre granulometría y curva (`_GR_CHART_GAP`) nunca se
+    veía: la curva conservaba su alto fijo y el hueco se quedaba igual.
+
+    La curva se dibuja con un alto menor en la misma posición: su contenido
+    (banda de denominaciones, marco, ejes y rótulos) se reparte dentro del alto
+    que recibe, así que bajarlo lo acerca a las firmas, que es exactamente lo
+    que hace falta para que el aire de arriba sea el pedido.
+    """
+    secs = [s for s in SECTIONS if s[0] != "page"]
+    idx_ch = next(i for i, s in enumerate(secs) if s[0] == "grain-size-chart")
+    anclas = sum(s[5] / 100.0 * CH for s in secs if s[3] >= 80.0)
+    cuerpo = [i for i, s in enumerate(secs) if s[3] < 80.0]
+    total = sum(hs[i] for i in cuerpo)
+    n_gaps = len(cuerpo) - 1
+    # hueco total disponible entre el tope del cuerpo y el bloque de firmas
+    disponible = CH - anclas - 1.0
+    sobrante = disponible - total - n_gaps * GAP
+    if sobrante <= 0:
+        return hs
+    extra = _GR_CHART_GAP - GAP          # lo que hay que añadir al hueco
+    if extra > sobrante:
+        extra = sobrante                  # no hay espacio para tanto
+    # el aire extra se lo queda la curva, que pierde ese alto
+    hs[idx_ch] = max(80.0, hs[idx_ch] - extra)
     return hs
 
 
@@ -595,22 +670,25 @@ def _dibujar_project_info(c, box, fn, fnb, datos, res, ident):
               [(tag, txt,
                 {"L1": L1, "L2": L2, "L3": L3}[f0] if isinstance(f0, str) else f0,
                 {"L1": L1, "L2": L2, "L3": L3}[f1] if isinstance(f1, str) else f1)
-               for tag, txt, f0, f1 in celdas])
-             for larga, celdas in _filas_ident(datos, res, ident)]
+               for tag, txt, f0, f1 in celdas],
+              tope)
+             for larga, celdas, tope in _filas_ident(datos, res, ident)]
 
     # altos por fila (misma fuente que la medición de la sección)
     altos = _rohs_project_info(datos, res, ident)
 
     c.setFillColor(C_DK)
     ycur = y + h
-    for (lag, celdas), rowh in zip(filas, altos):
+    for (lag, celdas, tope), rowh in zip(filas, altos):
         top = ycur
         bot = top - rowh
         rmid = (top + bot) / 2.0
 
-        # líneas envueltas para las celdas de texto largo
+        # líneas envueltas para las celdas de texto largo, acotadas al máximo
+        # de renglones de la fila (el mismo tope que usa la medición del alto)
         if lag:
-            lineas = _partir(c, celdas[1][1] or "", fn, SIZE, maxw)
+            lineas = _partir(c, celdas[1][1] or "", fn, SIZE, maxw,
+                             maxlineas=tope or 8)
             n = len(lineas)
             # baseline de la 1ª línea: centra la caja visual (diseño A/D)
             # del bloque de n líneas respecto al centro de la fila

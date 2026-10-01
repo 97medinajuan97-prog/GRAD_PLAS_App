@@ -505,7 +505,20 @@ class Granulometria(Seccion):
         que no se tamizó se sumaría al total y el fondo saldría mal. Se
         guardan en sus variables para recuperarlos al volver a soils.
         """
-        pesos = [fnum(self.peso_vars[i].get()) for i in range(self._n)]
+        # POR NOMBRE, no por posición.
+        #
+        # `peso_vars` está en el orden de la serie base (suelos), que tiene una
+        # fila más que las series de control de calidad. Leyéndolo por posición,
+        # en afirmados el 1/2" (oculto y vacío) se leía como el 3/8", el 3/8"
+        # como el N° 4, y así hasta el final, con el N° 200 sin leer nunca: de
+        # ahí el corrido en el reporte, el fondo mal calculado (la masa del
+        # N° 200 se iba al fondo) y el aviso de "datos incompletos" por el hueco
+        # del 1/2".
+        # `SIEVES_SUELOS` incluye el FONDO, que no tiene casilla de peso: se recorre
+        # sin la última fila, que es justo donde acaba `peso_vars`.
+        valor = {nombre: fnum(self.peso_vars[i].get())
+                 for i, (nombre, _d) in enumerate(SIEVES_SUELOS[:-1])}
+        pesos = [valor.get(nombre) for nombre, _d in self._serie[:-1]]
         return {"total": None, "pesos": pesos}
 
     def mostrar(self, res):
