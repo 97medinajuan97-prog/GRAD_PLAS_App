@@ -19,6 +19,9 @@ las firmas y el pie permanecen anclados al borde inferior.
 import os
 from collections import namedtuple
 
+from reporte.constantes import (codigo_exploracion, codigo_muestra,
+                                rotulo_exploracion)
+
 # No se importa `secciones.granulometria` a propósito: ese módulo arrastra
 # tkinter y el reporte se genera también sin interfaz (servidor, pruebas). El
 # número de filas se comprueba contra los datos received al dibujar, en
@@ -349,7 +352,8 @@ _LABEL_IDENT = {
     "muestra": "Muestra N°",
     "fecha_toma": "Fecha de toma",
     "fecha_ejecucion": "Fecha de ejecución",
-    "sondeo": "Perforación N°",
+    "exploracion": "Tipo de exploración",
+    "sondeo": "Exploración N°",
     "profundidad": "Profundidad (m)",
     "descripcion": "Color",
     "tipo": "Tipo",
@@ -532,8 +536,14 @@ La usan las dos funciones de la sección: la que dibuja y la que mide. Si
     proy = _id_campo(datos, ident, "proyecto")
     orden = _id_campo(datos, ident, "ordenado")
     sect = _id_campo(datos, ident, "sector")
-    perf = _id_campo(datos, ident, "sondeo")
-    mues = _id_campo(datos, ident, "muestra")
+    # El rótulo de la fila y el prefijo del número dependen del tipo de
+    # exploración elegido. Con la misma información en pantalla, un 2 puede ser
+    # una perforación o un apique, y son cosas distintas: llamarlas igual
+    # mentía sobre cómo se tomó la muestra.
+    tipo_exp = _id_campo(datos, ident, "exploracion")
+    perf = codigo_exploracion(_id_campo(datos, ident, "sondeo"), tipo_exp)
+    rotulo_exp = rotulo_exploracion(tipo_exp)
+    mues = codigo_muestra(_id_campo(datos, ident, "muestra"))
     f_toma = _id_campo(datos, ident, "fecha_toma")
     f_ejec = _id_campo(datos, ident, "fecha_ejecucion")
     prof = _profundidad(datos, ident)
@@ -563,7 +573,7 @@ La usan las dos funciones de la sección: la que dibuja y la que mide. Si
         (False, [("label", "FECHA DE TOMA", 0, "L1"), ("centro", d(f_toma), "L1", "L2"),
                  ("label", "FECHA DE EJECUCIÓN", "L2", "L3"),
                  ("centro", d(f_ejec), "L3", 1.0)], 0),
-        (False, [("label", "PERFORACIÓN", 0, "L1"), ("centro", d(perf), "L1", "L2"),
+        (False, [("label", rotulo_exp, 0, "L1"), ("centro", d(perf), "L1", "L2"),
                  ("label", "PROFUNDIDAD", "L2", "L3"), ("centro", d(prof), "L3", 1.0)], 0),
         (False, [("label", "TIPO", 0, "L1"), ("centro", tipo, "L1", "L2")]
                  + celdas_grad, 0),

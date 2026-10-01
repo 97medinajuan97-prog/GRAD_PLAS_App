@@ -18,6 +18,9 @@ from secciones.humedad import Humedad
 from secciones.limites import Limites
 from secciones.granulometria import Granulometria, serie_para
 from motor.calculo import calcular as motor_calcular, fnum
+from reporte.constantes import (NOMBRES_EXPLORACION, codigo_exploracion,
+                                codigo_muestra, datos_exploracion,
+                                prefijo_exploracion)
 from datos_ejemplo import datos_ejemplo, SIMBOLOS
 
 #: Título de la ventana. Antes se escribía literal dos veces (título del `Tk`
@@ -599,27 +602,37 @@ class App(tk.Tk):
     def _nombre_base(self, ident):
         """Nombre sin extensión, a partir de los datos de la muestra.
 
-        Se arma con lo que identifica una muestra en el reporte: el número de
-        perforación y el de muestra, más el tipo de ensayo.
+        Se arma con lo que identifica una muestra en el reporte: la exploración
+        y la muestra, más el tipo de ensayo y, en control de calidad, la
+        graduación.
 
-            Perforación 1, Muestra 5  ->  PM1_M5_GRAD
+            Exploración 1, Muestra 3, grad. BG-38  ->  PM-1_M-3_GRAD_BG-38
+            Exploración 2, Muestra 5, suelos        ->  A-2_M-5_GRAD
 
-        Si falta alguno se omite esa parte en vez de inventar un número, y si
-        faltan los dos queda un nombre genérico. El .json y el .pdf usan este
-        mismo nombre y solo cambian de extensión, así se reconocen como el par
-        que son.
+        El prefijo de la exploración sale del tipo elegido (P, PM o A), y si no
+        se eligió ninguno se usa PM, que es lo que se suponía siempre. Los
+        códigos van con guion, igual que en el reporte, para que el nombre del
+        archivo se lea como la hoja.
+
+        La graduación solo se añade en control de calidad; en suelos no existe
+        y se omite esa parte en vez de inventar una. Si falta el número de
+        exploración o el de muestra, se omite esa parte y el resto sigue igual.
         """
         def limpio(v):
             return re.sub(r"[^0-9A-Za-z_-]+", "", (v or "").strip().upper())
 
+        prefijo = prefijo_exploracion(ident.get("exploracion"))
         sondeo = limpio(ident.get("sondeo"))
         muestra = limpio(ident.get("muestra"))
         partes = []
         if sondeo:
-            partes.append("PM%s" % sondeo)
+            partes.append("%s-%s" % (prefijo, sondeo))
         if muestra:
-            partes.append("M%s" % muestra)
+            partes.append("M-%s" % muestra)
         partes.append("GRAD")
+        graduacion = limpio(ident.get("graduacion"))
+        if graduacion:
+            partes.append(graduacion)
         return "_".join(partes)
 
     def _nombre_muestra(self, ident):
@@ -642,7 +655,13 @@ class App(tk.Tk):
         return tipo, alcance, (self.sel_graduacion.get() or "")
 
     def _guardar_muestra(self):
-        """Guarda la muestra en la carpeta de trabajo, sin preguntar."""
+        """Guarda la muestra. Abre el diálogo de Windows para elegir dónde.
+
+        El nombre sugerido es el que arma la muestra, y el usuario puede
+        conservarlo o cambiarlo, igual que la carpeta. El diálogo abre en la
+        carpeta de trabajo y avisa él mismo si el archivo ya existe, así que no
+        hace falta una pregunta aparte.
+        """
         datos = self._datos()
         ident = self._ident_dict()
         tipo, alcance, graduacion = self._tipo_alcance()
@@ -658,11 +677,15 @@ class App(tk.Tk):
                 "La carpeta de trabajo no existe:\n%s\n\nElíjala de nuevo con "
                 "el botón de carpeta." % d)
             return
-        path = os.path.join(d, self._nombre_muestra(ident))
-        if os.path.isfile(path) and not messagebox.askyesno(
-                "Guardar muestra",
-                "Ya existe un archivo con ese nombre:\n%s\n\n¿Reemplazarlo?"
-                % path):
+        path = filedialog.asksaveasfilename(
+            title="Guardar muestra",
+            initialdir=d,
+            initialfile=self._nombre_muestra(ident),
+            defaultextension=".json",
+            filetypes=[("Muestra GRAD-PLAS", "*.json"),
+                       ("Todos los archivos", "*.*")],
+            confirmoverwrite=True)
+        if not path:
             return
         try:
             with open(path, "w", encoding="utf-8") as fh:
@@ -688,11 +711,17 @@ class App(tk.Tk):
         self._v_prof = self.register(self._val_prof)
 
         # orden: de lo más general (proyecto) a lo más específico de la muestra
+        #
+        # El tipo de exploración va entre "Ordenado por" y el número de
+        # exploración porque es lo que explica ese número: un 2 puede ser una
+        # perforación o un apique, y son cosas distintas. El rótulo del campo
+        # se llama "Exploración N°" y no "Perforación N°" por lo mismo.
         campos = [
             ("proyecto", "Proyecto", "txt", False),
             ("sector", "Sector", "txt", False),
             ("ordenado", "Ordenado por", "nombre", False),
-            ("sondeo", "Perforación N°", "alfanum", False),
+            ("exploracion", "Tipo de exploración", "exploracion", False),
+            ("sondeo", "Exploración N°", "alfanum", False),
             ("muestra", "Muestra N°", "entero", False),
             ("fecha_toma", "Fecha de toma", "fecha", True),
             ("fecha_ejecucion", "Fecha de ejecución", "fecha", True),
@@ -703,6 +732,9 @@ class App(tk.Tk):
             tk.Label(f, text=lab, bg=CARD, fg=TXT,
                      font=(FAM_UI, 10)).grid(row=i, column=0,
                                                  sticky="e", padx=(2, 6), pady=2)
+            if tip == "exploracion":
+                self._fila_exploracion(f, i)
+                continue
             frm = tk.Frame(f, bg=CARD, highlightbackground=SUP,
                            highlightthickness=1)
             frm.grid(row=i, column=1, padx=3, pady=2, sticky="ew")
@@ -810,6 +842,34 @@ class App(tk.Tk):
             "que el texto completo queda como 'Arcillas de plasticidad alta, "
             "de color café oscuro con vetas grises'. Si se deja vacío, se "
             "imprime solo la descripción automática.")))
+
+    def _fila_exploracion(self, f, fila):
+        """Fila del desplegable de tipo de exploración.
+
+        Va con el resto de campos de identificación y por eso entra en la
+        navegación con las flechas: si no, el <Abajo> de "Ordenado por" se
+        saltaría esta fila para irse a "Exploración N°".
+
+        Empieza vacía a propósito. Sin tipo elegido el reporte pone el rótulo
+        de siempre y el número suelto, que es como salen las muestras
+        guardadas antes de que existiera el campo, en vez de suponer una
+        perforación mecánica que el usuario nunca dijo.
+        """
+        self.sel_exploracion = SelectDropdown(
+            f, list(NOMBRES_EXPLORACION), inicial="", ancho=22)
+        self.sel_exploracion.grid(row=fila, column=1, padx=3, pady=2,
+                                  sticky="ew")
+        ToolTip(self.sel_exploracion,
+                "Decide cómo se rotula la exploración en el reporte y el "
+                "prefijo de su número: P, PM o A.")
+        ent = self.sel_exploracion.entry
+        for seq, signo in (("<Down>", +1), ("<Return>", +1), ("<Up>", -1)):
+            ent.bind(seq, lambda ev, idx=fila, d=signo, s=seq:
+                     self._ident_mov(idx, d, s == "<Return>"))
+        # El reporte lee el rótulo y el prefijo de aquí, así que el cambio tiene
+        # que rehacerlo igual que cualquier otro dato de identificación.
+        self.sel_exploracion.var.trace_add(
+            "write", lambda *a: self._refresh())
 
     def _entry_ident(self, parent, var, tip, width=22):
         """Crea un campo de entrada validado según el tipo de dato."""
@@ -1112,6 +1172,10 @@ class App(tk.Tk):
         for k in self.idvars:
             if k in ident:
                 self.idvars[k].set(ident[k])
+        # El tipo de exploración no está en `idvars`: es un desplegable, no un
+        # campo de texto. Si el ejemplo no trae ninguno, se deja como esté.
+        if "exploracion" in ident:
+            self.sel_exploracion.set(ident["exploracion"])
         self.ident_desc.delete("1.0", "end")
         self.ident_desc.insert("1.0", ident.get("descripcion", ""))
         self._ajustar_desc()
@@ -1153,10 +1217,17 @@ class App(tk.Tk):
 
         Incluye el tipo de muestra y, en control de calidad, el alcance, para
         que el reporte pueda imprimirlos sin volver a preguntar a la interfaz.
+
+        El tipo de exploración viaja tal cual se eligió, sin anteponerle el
+        prefijo al número: el prefijo depende del rótulo de la fila, y el código
+        completo lo compone el reporte. Si se compusiera en los dos lados, un
+        archivo guardado con un tipo y abierto con otro se vería distinto en la
+        hoja y en su nombre.
         """
         d = {k: v.get().strip() for k, v in self.idvars.items()}
         d["descripcion"] = self.ident_desc.get("1.0", "end-1c").strip()
         d["tipo"], d["alcance"], d["graduacion"] = self._tipo_alcance()
+        d["exploracion"] = self.sel_exploracion.get().strip()
         return d
 
     # ---------------- muestra: archivo de la muestra ----------------
@@ -1191,6 +1262,17 @@ class App(tk.Tk):
         if alcance not in self.ALCANCES_CC:
             alcance = ""
         self.sel_alcance.set(alcance or self.ALCANCE_AFIRMADO)
+        # El tipo de exploración se pone después del alcance, pero antes de la
+        # graduación: es un dato independiente de ambos y solo hay que
+        # descartar un valor que no exista en la lista.
+        #
+        # Las muestras guardadas antes de que existiera el campo no lo tienen,
+        # y eso está bien: se abren con el desplegable vacío y el reporte las
+        # sigue mostrando como "PERFORACIÓN", que es como se veían.
+        tipo_exp = ident.get("exploracion") or ""
+        if datos_exploracion(tipo_exp) is None:
+            tipo_exp = ""
+        self.sel_exploracion.set(tipo_exp)
         # La graduación se lee después de poner el alcance: la traza del
         # alcance ya deja la lista con los valores de esa familia, y solo
         # entonces tiene sentido restaurar el valor que traía el archivo.
@@ -1251,17 +1333,6 @@ class App(tk.Tk):
         self._aplicar_muestra(datos, ident)
         messagebox.showinfo("Abrir muestra", "Muestra cargada:\n%s" % path)
 
-    def _codigo(self, valor, prefijo):
-        """'1' + 'PM' -> 'PM-1'. Los códigos de la muestra se escriben con
-        su prefijo en el reporte, pero el usuario solo teclea el número.
-        Si ya viene con el prefijo, no se duplica."""
-        v = (valor or "").strip()
-        if not v:
-            return ""
-        if v.upper().startswith(prefijo):
-            return v
-        return "%s-%s" % (prefijo, v)
-
     def _ident(self):
         out = []
         for k, lab in [("proyecto", "Proyecto"), ("sector", "Sector"),
@@ -1271,12 +1342,15 @@ class App(tk.Tk):
                        ("fecha_ejecucion", "Fecha de ejecución")]:
             v = self.idvars[k].get().strip()
             if k == "muestra":
-                v = self._codigo(v, "M")
+                v = codigo_muestra(v)
             if v:
                 out.append("%s: %s" % (lab, v))
-        v = self._codigo(self.idvars["sondeo"].get(), "PM")
+        tipo_exp = self.sel_exploracion.get().strip()
+        if tipo_exp:
+            out.append("Tipo de exploración: %s" % tipo_exp)
+        v = codigo_exploracion(self.idvars["sondeo"].get(), tipo_exp)
         if v:
-            out.append("Perforación N°: %s" % v)
+            out.append("Exploración N°: %s" % v)
         desde = self.idvars["prof_desde"].get().strip()
         hasta = self.idvars["prof_hasta"].get().strip()
         vals = [x for x in (desde, hasta) if x]
@@ -1384,15 +1458,20 @@ class App(tk.Tk):
                 "La carpeta de trabajo no existe:\n%s\n\nElíjala de nuevo con "
                 "el botón de carpeta." % d)
             return
-        # El PDF va a la carpeta de trabajo con el nombre del archivo de
-        # muestra y solo cambia la extensión: PM1_M5_GRAD.json deja su reporte
-        # en PM1_M5_GRAD.pdf, al lado. Así los dos archivos se reconocen como el
-        # par que son y no hay nada que elegir en cada guardado.
-        path = os.path.join(d, self._nombre_base(ident) + ".pdf")
-        if os.path.isfile(path) and not messagebox.askyesno(
-                "Guardar PDF",
-                "Ya existe un reporte con ese nombre:\n%s\n\n¿Reemplazarlo?"
-                % path):
+        # El PDF va con el nombre del archivo de muestra y solo cambia la
+        # extensión: PM-1_M-3_GRAD_BG-38.json deja su reporte en
+        # PM-1_M-3_GRAD_BG-38.pdf, al lado. Así los dos archivos se reconocen
+        # como el par que son. Se abre el diálogo de Windows para que el
+        # usuario pueda cambiar el nombre o la carpeta, como en la muestra.
+        path = filedialog.asksaveasfilename(
+            title="Guardar PDF",
+            initialdir=d,
+            initialfile=self._nombre_base(ident) + ".pdf",
+            defaultextension=".pdf",
+            filetypes=[("Reporte PDF", "*.pdf"),
+                       ("Todos los archivos", "*.*")],
+            confirmoverwrite=True)
+        if not path:
             return
         try:
             # Se pasa el diccionario de identificación, no la lista de

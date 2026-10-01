@@ -38,6 +38,8 @@ import datetime
 import math
 import random
 
+from reporte.constantes import NOMBRES_EXPLORACION
+
 from secciones.granulometria import (calcular_granulometria, N_TAMICES,
                                      POS_1_2, SIEVES_SUELOS)
 from motor.clasificacion import clasificar
@@ -275,10 +277,15 @@ def _construir(entrada):
         "sector": _RNG.choice(SECTORES),
         "ordenado": _RNG.choice(ORDENADO),
         # Solo el número: el prefijo lo pone la app al imprimir (PM-3, M-2),
-        # igual que si lo teclea el usuario. Es lo que fija el nombre del
-        # archivo de la muestra: PM3_M2_GRAD.json
+        # según el tipo de exploración elegido, igual que si lo tecleara el
+        # usuario. Es lo que fija el nombre del archivo de la muestra:
+        # PM-3_M-2_GRAD_BG-38.json
         "sondeo": str(_RNG.randint(1, 12)),
         "muestra": str(_RNG.randint(1, 3)),
+        # A veces se deja sin tipo a propósito, que es como se ven las muestras
+        # guardadas antes de que existiera el campo: el reporte las rotula
+        # "PERFORACIÓN" y suelta el número. Así también se ve ese caso.
+        "exploracion": _RNG.choice(NOMBRES_EXPLORACION + ("",)),
         "fecha_toma": _fecha(base, _RNG.randint(0, 40)),
         "fecha_ejecucion": _fecha(base, _RNG.randint(45, 80)),
         "prof_desde": "%.2f" % desde,
