@@ -1492,6 +1492,36 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
 
 
 
+def _catmull_rom(pts):
+    """Tramos de Bézier cúbica que pasan por `pts` (Catmull-Rom uniforme).
+
+    Devuelve `[(p1, c1, c2, p2), ...]`, cada uno listo para un `curveTo`: la
+    cúbica arranca en `p1` y termina en `p2`, con `c1` y `c2` como puntos de
+    control. Pasa exactamente por cada punto, así que los puntos de la norma
+    siguen siendo las anclas de la curva.
+
+    En los extremos se duplica el punto vecino, que es lo que hace que la curva
+    salga y entre en su dirección y no con un pico artificial.
+
+    Es la misma curva que usa la granulometría del ensayo, no una segunda copia:
+    dos fórmulas iguales en el mismo archivo acaban divergiendo sin que nadie se
+    entere, y aquí una divergencia se vería como una franja que no cuadra con su
+    propia línea.
+    """
+    n = len(pts)
+    if n < 2:
+        return []
+    tramos = []
+    for i in range(n - 1):
+        p0 = pts[i - 1] if i > 0 else pts[i]
+        p1, p2 = pts[i], pts[i + 1]
+        p3 = pts[i + 2] if i + 2 < n else p2
+        c1 = (p1[0] + (p2[0] - p0[0]) / 6.0, p1[1] + (p2[1] - p0[1]) / 6.0)
+        c2 = (p2[0] - (p3[0] - p1[0]) / 6.0, p2[1] - (p3[1] - p1[1]) / 6.0)
+        tramos.append((p1, c1, c2, p2))
+    return tramos
+
+
 def _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts_curva):
     """Proyecta sobre la curva la zona de filtro del material.
 
@@ -1501,11 +1531,22 @@ def _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts_curva):
 
     `pts_curva` son las coordenadas ya proyectadas de la curva del ensayo.
 
-    Ojo con el eje: XLOG devuelve x MÁS grande cuanto MÁS FINO es el tamiz
-    (100 mm a la izquierda, 0.01 mm a la derecha). La zona se dibuja sobre su
-    propio recorrido, del tamiz más grueso al más fino, y de ahí sale sola la
-    forma: la línea superior arranca en un tamiz más fino que la inferior, así
-    que el tramo que le falta se cierra con un horizontal al 100 %.
+    Cada línea es una Catmull-Rom que pasa exactamente por los tamices que da
+    la norma, y nada más: donde la norma no especifica un tamiz, la línea no
+    pasa por ahí. Ponerle un punto de más sería afirmar un límite que la norma
+    no da. Ojo con el eje: XLOG devuelve x MÁS grande cuanto MÁS FINO es el
+    tamiz, así que el recorrido de la zona va del tamiz más grueso al más fino.
+
+    La línea superior arranca en un tamiz más fino que la inferior, porque así
+    es como viene en la norma: si ambas arrancaran en el tamiz más grueso, los
+    dos límites se tocarían en el 100 % y la zona cerraría en punta, cuando lo
+    que se busca es una franja con margen de variación. El hueco que deja esa
+    diferencia lo cierra el propio relleno, por arriba, al unir el final de la
+    franja con el punto más grueso de la línea inferior.
+
+    La franja se rellena con las MISMAS curvas que se dibujan. Rellenarla con
+    segmentos rectos entre los puntos, mientras las líneas van curvas, dejaría
+    la sombra asomando por fuera de la línea en cada tramo curvo.
 
     Sin graduación, o con una graduación de la que no hay zona cargada, no se
     dibuja nada: una zona inventada sería peor que ninguna.
@@ -1525,14 +1566,6 @@ def _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts_curva):
     if len(inf) < 2 or len(sup) < 2:
         return
 
-    # La línea superior no llega al tamiz más grueso de la inferior: ese
-    # tramo se cierra al 100 %, que es donde las dos coinciden en un material
-    # que cumple por arriba.
-    d_max_sup = sup[0][0]
-    sup = [(d, 100.0) for d, _p in inf if d > d_max_sup] + sup
-    if len(sup) < 2:
-        return
-
     CL_ZONA = rlcolors.HexColor("#B8860B")   # ocre de la zona de filtro
 
     def _proyecta(linea):
@@ -1541,17 +1574,30 @@ def _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts_curva):
 
     inf_p = _proyecta(inf)
     sup_p = _proyecta(sup)
+    inf_t = _catmull_rom(inf_p)
+    sup_t = _catmull_rom(sup_p)
 
-    # franja entre las dos líneas
+    def _sigue(p, tramos, al_reves=False):
+        """Acuza sobre `p` los tramos, de izquierda a derecha o al revés."""
+        if not al_reves:
+            p.moveTo(tramos[0][0][0], tramos[0][0][1])
+            for _p1, c1, c2, p2 in tramos:
+                p.curveTo(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
+            return
+        # Al revés: el mismo tramo con los extremos y los controles cambiados de
+        # sitio. Invertir una cúbica es arrancar donde terminaba, con los dos
+        # puntos de control en orden contrario, así que no hay que recalcular nada.
+        p.moveTo(tramos[-1][3][0], tramos[-1][3][1])
+        for ini, c1, c2, fin in reversed(tramos):
+            p.curveTo(c2[0], c2[1], c1[0], c1[1], ini[0], ini[1])
+
+    # franja entre las dos líneas, con las mismas curvas que se van a trazar
     c.saveState()
     c.setFillColor(CL_ZONA)
     c.setFillAlpha(0.16)
     p = c.beginPath()
-    p.moveTo(inf_p[0][0], inf_p[0][1])
-    for x, y in inf_p[1:]:
-        p.lineTo(x, y)
-    for x, y in reversed(sup_p):
-        p.lineTo(x, y)
+    _sigue(p, inf_t)
+    _sigue(p, sup_t, al_reves=True)
     p.close()
     c.drawPath(p, stroke=0, fill=1)
     c.restoreState()
@@ -1561,11 +1607,9 @@ def _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts_curva):
     c.setStrokeColor(CL_ZONA)
     c.setLineWidth(0.8)
     c.setDash([2.5, 2.0], 0)
-    for linea in (inf_p, sup_p):
+    for tramos in (inf_t, sup_t):
         p = c.beginPath()
-        p.moveTo(linea[0][0], linea[0][1])
-        for x, y in linea[1:]:
-            p.lineTo(x, y)
+        _sigue(p, tramos)
         c.drawPath(p, stroke=1, fill=0)
     c.restoreState()
 
@@ -1705,21 +1749,12 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
     _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts)
 
     # 5) curva negra (Catmull-Rom, sutil, con 2 puntos control por tramo)
-    if len(pts) >= 2:
-        def _seg(p0, p1, p2, p3):
-            return ((p1[0], p1[1]),
-                    (p1[0] + (p2[0] - p0[0]) / 6.0, p1[1] + (p2[1] - p0[1]) / 6.0),
-                    (p2[0] - (p3[0] - p1[0]) / 6.0, p2[1] - (p3[1] - p1[1]) / 6.0),
-                    (p2[0], p2[1]))
+    tramos = _catmull_rom(pts)
+    if tramos:
         path = c.beginPath()
-        path.moveTo(pts[0][0], pts[0][1])
-        for i in range(len(pts) - 1):
-            p0 = pts[i - 1] if i > 0 else pts[i]
-            p1 = pts[i]
-            p2 = pts[i + 1]
-            p3 = pts[i + 2] if i + 2 < len(pts) else p2
-            a, c1, c2, b = _seg(p0, p1, p2, p3)
-            path.curveTo(c1[0], c1[1], c2[0], c2[1], b[0], b[1])
+        path.moveTo(tramos[0][0][0], tramos[0][0][1])
+        for _p1, c1, c2, p2 in tramos:
+            path.curveTo(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
         c.setStrokeColor(CL_BRAND)
         c.setLineWidth(1.0)
         c.setLineJoin(1)
