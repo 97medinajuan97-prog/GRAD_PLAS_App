@@ -299,12 +299,28 @@ class App(tk.Tk):
     TIPO_CC = "Control de calidad"
     TIPOS_MUESTRA = (TIPO_SUELOS, TIPO_CC)
 
-    #: Dentro de control de calidad, la familia de ensayo. Son los tres
-    #: frentes en que un material se somete a control tras puesto en obra.
-    ALCANCE_CC_1 = "Afirmados-Bases-Subbases"
-    ALCANCE_CC_2 = "Estructuras y drenajes"
-    ALCANCE_CC_3 = "Pavimentos asfálticos"
-    ALCANCES_CC = (ALCANCE_CC_1, ALCANCE_CC_2, ALCANCE_CC_3)
+    #: Dentro de control de calidad, la familia de ensayo. Afirmados, bases y
+    #: subbases van separados porque cada familia tiene sus propias
+    #: graduaciones (ver `GRADUACIONES`), y meterlos en una sola opción
+    #: obligaría a elegir una graduación que no aplica al material.
+    ALCANCE_AFIRMADO = "Afirmados"
+    ALCANCE_BASE = "Bases"
+    ALCANCE_SUBBASE = "Subbases"
+    ALCANCE_ESTRUCTURAS = "Estructuras y drenajes"
+    ALCANCE_PAVIMENTOS = "Pavimentos asfálticos"
+    ALCANCES_CC = (ALCANCE_AFIRMADO, ALCANCE_BASE, ALCANCE_SUBBASE,
+                   ALCANCE_ESTRUCTURAS, ALCANCE_PAVIMENTOS)
+
+    #: Graduación de cada familia de granulares, según lo pedido para el control
+    #: de calidad. Solo estos tres alcances tienen graduación; estructuras,
+    #: drenajes y pavimentos asfálticos no la piden, así que el selector de
+    #: graduación se esconde y el archivo guarda la cadena vacía.
+    GRAD_AFIRMADO = ("A-38", "A-25")
+    GRAD_BASE = ("BG-40", "BG-27", "BG-38", "BG-25")
+    GRAD_SUBBASE = ("SBG-50", "SBG-38")
+    GRADUACIONES = {ALCANCE_AFIRMADO: GRAD_AFIRMADO,
+                    ALCANCE_BASE: GRAD_BASE,
+                    ALCANCE_SUBBASE: GRAD_SUBBASE}
 
     def _build_muestra(self, parent):
         """Caja de la muestra: carpeta de trabajo, abrir y guardar.
@@ -379,10 +395,37 @@ class App(tk.Tk):
         lbl_alc.pack(fill="x", pady=(10, 2))
         self.sel_alcance = SelectDropdown(
             self._caja_alcance, list(self.ALCANCES_CC),
-            inicial=self.ALCANCE_CC_1, ancho=22)
+            inicial=self.ALCANCE_AFIRMADO, ancho=22)
         self.sel_alcance.pack(fill="x")
         ToolTip(self.sel_alcance, "Familia de ensayo dentro de control de "
                                   "calidad.")
+
+        # La graduación depende del alcance: cada familia tiene las suyas y
+        # estructuras, drenajes y pavimentos no tienen ninguna. Se deja la
+        # lista completa de graduaciones en el desplegable y se limita con
+        # `values`, en vez de crear un selector por familia.
+        self._caja_graduacion = tk.Frame(f, bg=CARD)
+        lbl_grad = tk.Label(self._caja_graduacion, text="Tipo de graduación",
+                            bg=CARD, fg=MUT, font=(FAM_UI, 9), anchor="w")
+        lbl_grad.pack(fill="x", pady=(10, 2))
+        self.sel_graduacion = SelectDropdown(
+            self._caja_graduacion, list(self.GRAD_AFIRMADO),
+            inicial=self.GRAD_AFIRMADO[0], ancho=22)
+        self.sel_graduacion.pack(fill="x")
+        ToolTip(self.sel_graduacion, "Graduación exigida para el material "
+                                     "de esta familia.")
+# Una graduación recuerda por familia. Al pasar por Afirmados y volver a
+        # Bases, se recupera lo que se había escogido en Bases en vez de
+        # volver a la primera de la lista.
+        self._grad_por_familia = {}
+        #: familia a la que pertenece la lista que hay en pantalla en este
+        #: momento. Sin esto no se sabe en qué carpeta guardar el valor que
+        #: se está dejando, y se acabaría guardando BG-27 como si fuera la
+        #: graduación de Afirmados.
+        self._familia_grad = ""
+        self.sel_alcance.var.trace_add(
+            "write", lambda *a: self._sincronizar_alcance())
+
         # `trace` en vez de un comando: si la variable cambia por cualquier vía
         # (cargar una muestra, restaurar un archivo) el selector se muestra o se
         # esconde igual, y no queda desincronizado con la lista de alcances.
@@ -422,11 +465,38 @@ class App(tk.Tk):
         # por un ciclo de dibujo completo, así que al cargar una muestra el
         # selector ya estaba empacado pero parecía no estarlo, y el siguiente
         # `pack` lo recolocaba al final de la caja, debajo del símbolo de ayuda.
-        empacada = (self._caja_alcance.winfo_manager() != "")
-        if es_cc and not empacada:
-            self._caja_alcance.pack(fill="x")
-        elif not es_cc and empacada:
-            self._caja_alcance.pack_forget()
+        self._empacar(self._caja_alcance, es_cc)
+
+        alcance = self.sel_alcance.get()
+        graduaciones = self.GRADUACIONES.get(alcance)
+        if graduaciones is not None and self._familia_grad != alcance:
+            # La lista del desplegable cambia con el alcance: sin esto, tras
+            # elegir Afirmados se seguirían ofreciendo las graduaciones de la
+            # familia anterior.
+            #
+            # `self._familia_grad` es la familia a la que pertenece lo que hay
+            # ahora en pantalla. Antes de cambiar la lista se guarda ese valor
+            # en SU familia, para que al volver a ella se recupere lo que se
+            # había escogido en ella y no la primera de la lista.
+            if self._familia_grad:
+                self._grad_por_familia[self._familia_grad] = \
+                    self.sel_graduacion.get()
+            elegido = self._grad_por_familia.get(alcance) or ""
+            if elegido not in graduaciones:
+                elegido = graduaciones[0]
+            self.sel_graduacion._values = list(graduaciones)
+            self.sel_graduacion.set(elegido)
+            self._familia_grad = alcance
+        self._empacar(self._caja_graduacion, es_cc and bool(graduaciones))
+
+    @staticmethod
+    def _empacar(caja, visible):
+        """Empaqueta o saca una caja, sin depender de si ya se ha pintado."""
+        empacada = (caja.winfo_manager() != "")
+        if visible and not empacada:
+            caja.pack(fill="x")
+        elif not visible and empacada:
+            caja.pack_forget()
 
     # ---------------- carpeta de trabajo ----------------
     #: archivo donde se recuerda la carpeta elegida entre sesiones. Va junto
@@ -495,25 +565,31 @@ class App(tk.Tk):
         return self._nombre_base(ident) + ".json"
 
     def _tipo_alcance(self):
-        """(tipo, alcance) elegidos, con el alcance vacío si no aplica.
+        """(tipo, alcance, graduación) elegidos.
 
-        El alcance solo tiene valor en control de calidad: en suelos se
-        devuelve vacío, que es lo que viaja al archivo y al reporte.
+        El alcance y la graduación solo tienen valor en control de calidad, y la
+        graduación solo en las tres familias que la tienen: en suelos, en
+        estructuras y drenajes y en pavimentos asfálticos se devuelven vacías,
+        que es lo que viaja al archivo y al reporte.
         """
         tipo = self.sel_tipo.get() or self.TIPO_SUELOS
-        alcance = (self.sel_alcance.get()
-                   if tipo == self.TIPO_CC else "")
-        return tipo, alcance
+        if tipo != self.TIPO_CC:
+            return tipo, "", ""
+        alcance = self.sel_alcance.get() or ""
+        if alcance not in self.GRADUACIONES:
+            return tipo, alcance, ""
+        return tipo, alcance, (self.sel_graduacion.get() or "")
 
     def _guardar_muestra(self):
         """Guarda la muestra en la carpeta de trabajo, sin preguntar."""
         datos = self._datos()
         ident = self._ident_dict()
-        tipo, alcance = self._tipo_alcance()
+        tipo, alcance, graduacion = self._tipo_alcance()
         ident["tipo"] = tipo
-        # Se guarda aunque esté vacío: así el archivo declara que es una
-        # muestra de suelos, en vez de no decir nada.
+        # Se guardan aunque estén vacíos: así el archivo declara que es una
+        # muestra de suelos sin graduación, en vez de no decir nada.
         ident["alcance"] = alcance
+        ident["graduacion"] = graduacion
         d = self._dir_trabajo()
         if not os.path.isdir(d):
             messagebox.showerror(
@@ -993,7 +1069,7 @@ class App(tk.Tk):
         """
         d = {k: v.get().strip() for k, v in self.idvars.items()}
         d["descripcion"] = self.ident_desc.get("1.0", "end-1c").strip()
-        d["tipo"], d["alcance"] = self._tipo_alcance()
+        d["tipo"], d["alcance"], d["graduacion"] = self._tipo_alcance()
         return d
 
     # ---------------- muestra: archivo de la muestra ----------------
@@ -1022,7 +1098,18 @@ class App(tk.Tk):
         alcance = ident.get("alcance") or ""
         if alcance not in self.ALCANCES_CC:
             alcance = ""
-        self.sel_alcance.set(alcance or self.ALCANCE_CC_1)
+        self.sel_alcance.set(alcance or self.ALCANCE_AFIRMADO)
+        # La graduación se lee después de poner el alcance: la traza del
+        # alcance ya deja la lista con los valores de esa familia, y solo
+        # entonces tiene sentido restaurar el valor que traía el archivo.
+        graduacion = ident.get("graduacion") or ""
+        if graduacion not in self.sel_graduacion.values:
+            graduacion = ""
+        if graduacion:
+            self.sel_graduacion.set(graduacion)
+            # Se apunta como elegida para esta familia, para que al pasar por
+            # otra y volver no se pierda.
+            self._grad_por_familia[self._familia_grad] = graduacion
         self._refresh()
 
     def _abrir_muestra(self):

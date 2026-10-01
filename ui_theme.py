@@ -285,10 +285,21 @@ class _ThumbScroll(tk.Canvas):
     GROSOR = 8          # grosor del pulgar
     PLANO = 4           # grosor de la guía
 
-    def __init__(self, master, command, horizontal=False, bg=None):
+    def __init__(self, master, command, horizontal=False, bg=None, alto=None):
         self._horizontal = horizontal
-        alto = 14 if horizontal else None
-        ancho = None if horizontal else self.ANCHO
+        # `height`/`width` son en píxeles; el "-1c" de Tk (7c) es lo que hace
+        # que un canvas vertical pida 265 px y estire el popup del desplegable
+        # muy por debajo de lo que ocupa su lista. Sin valor explícito, la
+        # altura la manda quien lo contiene.
+        if horizontal:
+            alto = 14 if alto is None else alto
+            ancho = None
+        else:
+            # 1 px de altura pedida: la real la da `fill="y"` en el contenedor.
+            # Un canvas sin height explícito usa el 7c por defecto de Tk (265 px),
+            # que es lo que estiraba el desplegable.
+            alto = 1 if alto is None else alto
+            ancho = self.ANCHO
         super().__init__(master, width=ancho, height=alto,
                          bg=bg or BG, highlightthickness=0, bd=0,
                          cursor="hand2")

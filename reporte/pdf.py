@@ -320,6 +320,7 @@ _LABEL_IDENT = {
     "descripcion": "Color",
     "tipo": "Tipo",
     "alcance": "Alcance",
+    "graduacion": "Tipo de graduación",
 }
 
 
@@ -351,16 +352,23 @@ def _id_campo(datos, ident, key):
 
 
 def _tipo_muestra(datos, ident):
-    """(tipo, alcance) para el encabezado del reporte.
+    """(tipo, alcance, graduación) para el encabezado del reporte.
 
     El tipo siempre tiene valor ("Suelos" por defecto). El alcance solo se
-    imprime en control de calidad: es la familia de ensayo y no aplica a una
-    muestra de suelos, así que una muestra de suelos sale sin esa fila en vez
-    de salir con un campo vacío.
+    imprime en control de calidad, y la graduación solo cuando hay alcance que
+    la lleva: son los afirmados, las bases y las subbases. Una muestra de suelos
+    sale sin esas celdas en vez de salir con campos vacíos.
+
+    Las tres cadenas van en caja alta, como las demás celdas de datos del
+    encabezado: son valores fijos de una lista cerrada, y escribirlos como
+    vienen dejaría la fila mezclando "Control de calidad" con "A-38".
     """
     tipo = (_id_campo(datos, ident, "tipo") or "Suelos").strip()
-    alcance = (_id_campo(datos, ident, "alcance") or "").strip()
-    return tipo, (alcance if (alcance and tipo.lower() != "suelos") else "")
+    es_cc = (tipo.lower() != "suelos")
+    alcance = (_id_campo(datos, ident, "alcance") or "").strip() if es_cc else ""
+    graduacion = ((_id_campo(datos, ident, "graduacion") or "").strip()
+                  if alcance else "")
+    return (tipo.upper(), alcance.upper(), graduacion.upper())
 
 
 def _desc_material(datos, res, ident):
@@ -455,11 +463,57 @@ def _partir(c, txt, font, size, maxw, maxlineas=8):
     return lineas or [""]
 
 
+def _filas_ident(datos, res, ident):
+    """Definición de las filas de la tabla de identificación.
+
+    La usan las dos funciones de la sección: la que dibuja y la que mide. Si
+    construyeran la lista por separado, agregar una fila en una y no en la otra
+    descuadraría la tabla sin que nada avise.
+    """
+    proy = _id_campo(datos, ident, "proyecto")
+    orden = _id_campo(datos, ident, "ordenado")
+    sect = _id_campo(datos, ident, "sector")
+    perf = _id_campo(datos, ident, "sondeo")
+    mues = _id_campo(datos, ident, "muestra")
+    f_toma = _id_campo(datos, ident, "fecha_toma")
+    f_ejec = _id_campo(datos, ident, "fecha_ejecucion")
+    prof = _profundidad(datos, ident)
+    desc = _desc_material(datos, res, ident)
+    tipo, alcance, graduacion = _tipo_muestra(datos, ident)
+
+    celdas_alcance = ([("label", "ALCANCE", "L2", "L3"),
+                       ("centro", alcance, "L3", 1.0)] if alcance else [])
+    filas = [
+        # (es_larga, celdas); los rótulos de las columnas son nombres, no
+        # números: las fracciones las pone quien dibuja, con la misma grilla.
+        (True,  [("label", "PROYECTO", 0, "L1"), ("texto", proy, "L1", 1.0)]),
+        (True,  [("label", "ORDENADO POR", 0, "L1"), ("texto", orden, "L1", 1.0)]),
+        (False, [("label", "SECTOR", 0, "L1"), ("centro", sect, "L1", "L2"),
+                 ("label", "MUESTRA", "L2", "L3"), ("centro", mues, "L3", 1.0)]),
+        (False, [("label", "FECHA DE TOMA", 0, "L1"), ("centro", f_toma, "L1", "L2"),
+                 ("label", "FECHA DE EJECUCIÓN", "L2", "L3"),
+                 ("centro", f_ejec, "L3", 1.0)]),
+        (False, [("label", "PERFORACIÓN", 0, "L1"), ("centro", perf, "L1", "L2"),
+                 ("label", "PROFUNDIDAD", "L2", "L3"), ("centro", prof, "L3", 1.0)]),
+        (False, [("label", "TIPO", 0, "L1"), ("centro", tipo, "L1", "L2")]
+                 + celdas_alcance),
+    ]
+    # La graduación solo existe si hay una: son tres filas extra en el informe
+    # de un material granular controlado.
+    if graduacion:
+        filas.append((False, [("label", "TIPO DE GRADUACIÓN", 0, "L1"),
+                              ("centro", graduacion, "L1", 1.0)]))
+    filas.append((True, [("label", "DESCRIPCIÓN MATERIAL", 0, "L1"),
+                         ("desc", desc, "L1", 1.0)]))
+    return filas
+
+
 def _rohs_project_info(datos, res, ident):
     """Alturas (pt) de cada fila de identificación, en orden vertical.
 
     Las filas de texto largo crecen con las líneas envueltas; las pareadas
-    tienen alto fijo. Sirve para medir la sección y para dibujarla.
+    tienen alto fijo. Las que existen dependen de los datos, y el alto sale de
+    `_filas_ident`, la misma definición que usa el dibujo.
     """
     from reportlab.pdfgen import canvas as _canvas
     import tempfile
@@ -470,21 +524,14 @@ def _rohs_project_info(datos, res, ident):
     SIZE, R0, LH = 8.0, 12.5, 10.0
     maxw = 468.0 * (1.0 - L1) - 2.0 * PAD
 
-    proy = _id_campo(datos, ident, "proyecto")
-    orden = _id_campo(datos, ident, "ordenado")
-    desc = _desc_material(datos, res, ident)
-
     def roh(larga, txto):
         if not larga:
             return R0
         n = max(1, len(_partir(c, txto or "", fn, SIZE, maxw)))
         return max(R0, n * LH + 2.0)
 
-    # Tipo/ALCANCE y descripción material son filas fijas: el tipo siempre tiene
-    # valor y el alcance solo se imprime en control de calidad, pero la fila no
-    # crece ni mengua, así el alto de la sección no depende de la muestra.
-    return [roh(True, proy), roh(True, orden), R0, R0, R0, R0,
-            roh(True, desc)]
+    return [roh(larga, celdas[-1][1])
+            for larga, celdas in _filas_ident(datos, res, ident)]
 
 
 def _medir_project_info(datos, res, ident):
@@ -530,36 +577,14 @@ def _dibujar_project_info(c, box, fn, fnb, datos, res, ident):
     x, y, w, h = box
     maxw = w * (1.0 - L1) - 2.0 * PAD
 
-    proy = _id_campo(datos, ident, "proyecto")
-    sect = _id_campo(datos, ident, "sector")
-    perf = _id_campo(datos, ident, "sondeo")
-    orden = _id_campo(datos, ident, "ordenado")
-    mues = _id_campo(datos, ident, "muestra")
-    f_toma = _id_campo(datos, ident, "fecha_toma")
-    f_ejec = _id_campo(datos, ident, "fecha_ejecucion")
-    prof = _profundidad(datos, ident)
-    desc = _desc_material(datos, res, ident)
-    tipo, alcance = _tipo_muestra(datos, ident)
-
-    # La fila TIPO/ALCANCE va emparejada con SECTOR/MUESTRA, que son campos
-    # cortos. El alcance solo se imprime en control de calidad; en suelos la
-    # celda queda vacía, porque un alcance ahí no significaría nada.
-    celdas_alcance = ([("label", "ALCANCE", L2, L3), ("centro", alcance, L3, 1.0)]
-                      if alcance else [])
-    filas = [
-        # (es_larga, celdas)
-        (True,  [("label", "PROYECTO", 0, L1), ("texto", proy, L1, 1.0)]),
-        (True,  [("label", "ORDENADO POR", 0, L1), ("texto", orden, L1, 1.0)]),
-        (False, [("label", "SECTOR", 0, L1), ("centro", sect, L1, L2),
-                 ("label", "MUESTRA", L2, L3), ("centro", mues, L3, 1.0)]),
-        (False, [("label", "FECHA DE TOMA", 0, L1), ("centro", f_toma, L1, L2),
-                 ("label", "FECHA DE EJECUCIÓN", L2, L3), ("centro", f_ejec, L3, 1.0)]),
-        (False, [("label", "PERFORACIÓN", 0, L1), ("centro", perf, L1, L2),
-                 ("label", "PROFUNDIDAD", L2, L3), ("centro", prof, L3, 1.0)]),
-        (False, [("label", "TIPO", 0, L1), ("centro", tipo, L1, L2)]
-                 + celdas_alcance),
-        (True,  [("label", "DESCRIPCIÓN MATERIAL", 0, L1), ("desc", desc, L1, 1.0)]),
-    ]
+    # Las filas vienen de `_filas_ident`, la misma definición que usa la
+    # medición: así el dibujo y el alto no pueden separarse.
+    filas = [(larga,
+              [(tag, txt,
+                {"L1": L1, "L2": L2, "L3": L3}[f0] if isinstance(f0, str) else f0,
+                {"L1": L1, "L2": L2, "L3": L3}[f1] if isinstance(f1, str) else f1)
+               for tag, txt, f0, f1 in celdas])
+             for larga, celdas in _filas_ident(datos, res, ident)]
 
     # altos por fila (misma fuente que la medición de la sección)
     altos = _rohs_project_info(datos, res, ident)
