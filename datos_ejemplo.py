@@ -39,7 +39,7 @@ import math
 import random
 
 from secciones.granulometria import (calcular_granulometria, N_TAMICES,
-                                     POS_1_2, DIAM)
+                                     POS_1_2, SIEVES_SUELOS)
 from motor.clasificacion import clasificar
 
 _RNG = random.Random()
@@ -148,8 +148,9 @@ def _con_paso_medio(p):
     if len(p) != N_TAMICES - 1:
         return list(p)
     arriba, abajo = float(p[POS_1_2 - 1]), float(p[POS_1_2])   # 3/4" y 3/8"
-    d1, d2 = DIAM[POS_1_2 - 1], DIAM[POS_1_2]
-    t = math.log10(DIAM[POS_1_2])
+    diam = [d for _, d in SIEVES_SUELOS]
+    d1, d2 = diam[POS_1_2 - 1], diam[POS_1_2]
+    t = math.log10(diam[POS_1_2])
     frac = (t - math.log10(d1)) / (math.log10(d2) - math.log10(d1))
     val = arriba + (abajo - arriba) * frac
     return (list(p[:POS_1_2]) + [round(val, 2)] + list(p[POS_1_2:]))

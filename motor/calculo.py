@@ -90,10 +90,19 @@ def calcular(data):
 
     # ---- 3 · granulometría: el total es el peso seco del suelo (Ws) ----
     # (tomado de la humedad natural: Ws = W2 − Wc, sin contenedor)
+    #
+    # La serie de tamices depende del tipo de muestra: la de control de
+    # calidad es más corta. Se lee del bloque `grano`, que es donde la interfaz
+    # guarda los datos del ensayo.
+    from secciones.granulometria import serie_para
+    grano = data["grano"]
+    serie = serie_para(grano.get("tipo"), grano.get("alcance"))
+    res["serie"] = [t for t, _ in serie]
     w_suelo = hu["w_suelo"]
     g_total = w_suelo if (w_suelo is not None and w_suelo > 0) else None
     res["g_total"] = g_total
-    g = calcular_granulometria({"total": g_total, "pesos": data["grano"]["pesos"]})
+    g = calcular_granulometria({"total": g_total, "pesos": grano["pesos"]},
+                               serie)
     res["fondo"] = g["fondo"]
     res["sum_ret"] = g["sum_ret"]
     res["sieve"] = g["sieve"]

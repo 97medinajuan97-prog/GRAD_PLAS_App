@@ -17,55 +17,136 @@ from ui_theme import (Seccion, TXT, MUT, CARD, ACC, SUP, AMBAR,
                       NEGRO, ToolTip, FAM_UI, validar_tecla, ayuda_seccion)
 from motor.calculo import fnum
 
-#: Tamices de la granulometría, de mayor a menor. El 1/2" (12.70 mm) se agregó
-#: porque en la curva de densidad es el salto de la grava gruesa a la arena
-#: gruesa y sin él esa zona quedaba sin apoyo en la interpolación.
-SIEVES = [
-    ('3"', 76.2), ('2 1/2"', 63.5), ('2"', 50.8), ('1 1/2"', 38.1),
-    ('1"', 25.4), ('3/4"', 19.05), ('1/2"', 12.7), ('3/8"', 9.525),
-    ('N° 4', 4.75), ('N° 10', 2.0), ('N° 40', 0.425),
-    ('N° 200', 0.075), ('FONDO', 0.0),
-]
-#: cantidad de tamices con peso retenido que se digitan. El FONDO va aparte:
-#: se calcula restando el total menos la suma, no se escribe.
+#: Diámetros nominales, en mm, de cada tamiz. Se guardan aparte para poder armar
+#: listas por alcance sin repetir el texto de cada uno, y para renombrar (el
+#: 1/2" de la base general es el 0.5" de la especificación de subbases).
+_D = {'3"': 76.2, '2 1/2"': 63.5, '2"': 50.8, '1 1/2"': 38.1, '1"': 25.4,
+      '3/4"': 19.05, '1/2"': 12.7, '3/8"': 9.525, 'N° 4': 4.75,
+      'N° 10': 2.0, 'N° 40': 0.425, 'N° 200': 0.075, 'FONDO': 0.0}
+
+
+def _serie(nombres):
+    return [(n, _D[n]) for n in nombres]
+
+
+#: Serie base, para suelos (INV E-123). El 1/2" (12.70 mm) está porque en la
+#: curva de densidad es el salto de la grava gruesa a la arena gruesa y sin él
+#: esa zona queda sin apoyo en la interpolación.
+SIEVES_SUELOS = _serie([
+    '3"', '2 1/2"', '2"', '1 1/2"', '1"', '3/4"', '1/2"', '3/8"',
+    'N° 4', 'N° 10', 'N° 40', 'N° 200', 'FONDO',
+])
+
+#: Series de control de calidad. En todas se conservan los tamices más gruesos
+#: que ya tiene la serie base y que caen por encima del primero de la
+#: especificación, porque el material control los retiene y se necesitan para
+#: que la curva no empiece a mitad. A partir de ahí va la lista de cada
+#: familia.
+#:
+#:   Afirmados  desde 1 1/2":  1 1/2", 1", 3/4", 3/8", N°4, N°10, N°40, N°200
+#:   Bases      desde 1 1/2":  1 1/2", 1", 3/4", 3/8", N°4, N°10, N°40, N°200
+#:   Subbases   desde 2":      2", 1 1/2", 1", 1/2", 3/8", N°4, N°10, N°40, N°200
+#:
+#: Fíjate que affirmed y bases coinciden en tamices: la graduación es lo que las
+#: distingue (A-38 contra BG-38), no la serie.
+SIEVES_AFIRMADOS = _serie([
+    '3"', '2 1/2"', '2"',
+    '1 1/2"', '1"', '3/4"', '3/8"',
+    'N° 4', 'N° 10', 'N° 40', 'N° 200', 'FONDO',
+])
+SIEVES_BASES = SIEVES_AFIRMADOS
+SIEVES_SUBBASES = _serie([
+    '3"', '2 1/2"',
+    '2"', '1 1/2"', '1"', '1/2"', '3/8"',
+    'N° 4', 'N° 10', 'N° 40', 'N° 200', 'FONDO',
+])
+
+#: Alcance de control de calidad -> serie de tamices. Los alcances que no
+#: aparecen aquí (estructuras y drenajes, pavimentos asfálticos) no tienen
+#: graduación ni serie propia: se usa la base, que es la del tamizado de suelo.
+SERIES_CC = {
+    "Afirmados": SIEVES_AFIRMADOS,
+    "Bases": SIEVES_BASES,
+    "Subbases": SIEVES_SUBBASES,
+}
+
+#: Serie por defecto: la de suelos. Es la que se usa cuando no se indica otro,
+#: y la que lee un archivo de muestra sin alcance.
+SIEVES = SIEVES_SUELOS
+#: cantidad de tamices con peso retenido de la serie base. El FONDO va
+#: aparte: se calcula restando el total menos la suma, no se escribe.
 N_TAMICES = len(SIEVES) - 1
-#: posición del 1/2" dentro de `SIEVES`. La necesitan también quienes leen un
+
+
+def serie_para(tipo=None, alcance=None):
+    """Serie de tamices según el tipo de muestra y su alcance.
+
+    Suelos y los alcances sin serie propia usan la base. Un archivo viejo, sin
+    estas claves, también: no se fuerza a una serie de control de calidad a la
+    que no se pertenece.
+    """
+    if (tipo or "").strip().lower() == "suelos":
+        return SIEVES_SUELOS
+    return SERIES_CC.get((alcance or "").strip(), SIEVES_SUELOS)
+
+
+def n_tamices_de(serie):
+    """Cuántos tamices con peso se digitan en una serie (sin el FONDO)."""
+    return len(serie) - 1
+
+
+#: posición del 1/2" dentro de la serie base. La necesitan quienes leen un
 #: archivo de muestra de la versión anterior, que no tenía ese tamiz: el hueco
 #: va aquí, no al final, o los pesos siguientes se corren una fila y el 3/8"
 #: aparecería como si fuera el 1/2", falseando media curva.
 POS_1_2 = next(i for i, (t, _) in enumerate(SIEVES) if t == '1/2"')
-DIAM = [d for _, d in SIEVES]
 
-def _indice(tamiz):
-    """Posición de un tamiz por su nombre.
 
-    Los tamices clave se buscan por nombre y no por número de posición: al
-    agregar el 1/2" todos los índices fijos corridos y %pasa N°4 quedaba leyendo
-    el 3/8", %pasa N°200 el N°40, y con ellos la grava, la arena, los finos, el
-    tipo de suelo y las clasificaciones SUCs y AASHTO. Buscando por nombre, un
-    cambio en la lista ya no puede desalinear nada en silencio.
+def indices_de(serie):
+    """Índices de los tamices que definen fracciones y grupos, por nombre.
+
+    Se buscan por nombre y no por número de posición. Con posición fija, al
+    agregar el 1/2" %pasa N°4 quedó leyendo el 3/8" y %pasa N°200 el N°40, y
+    con ellos la grava, la arena, los finos, el tipo de suelo y las
+    clasificaciones SUCs y AASHTO. Con series de distinta longitud, el error
+    sería aún más fácil de cometer.
+
+    Los cuatro tamices que definen fracción y grupo están en todas las series:
+    si alguna vez faltara en una, se avisa al importar en vez de leer otra fila.
     """
-    return SIEVES.index(next(s for s in SIEVES if s[0] == tamiz))
+    faltan = [t for t in ("N° 4", "N° 10", "N° 40", "N° 200")
+              if not any(n == t for n, _ in serie)]
+    if faltan:
+        raise ValueError("La serie de tamices no tiene %s, que definen la "
+                         "grava, la arena, los finos y la clasificación."
+                         % ", ".join(faltan))
+    idx = [next(i for i, (n, _) in enumerate(serie) if n == t)
+           for t in ("N° 4", "N° 10", "N° 40", "N° 200")]
+    return {"n4": idx[0], "n10": idx[1], "n40": idx[2], "n200": idx[3]}
 
-#: índices de los tamices que definen fracciones y grupos, por nombre.
-I_N4 = _indice('N° 4')
-I_N10 = _indice('N° 10')
-I_N40 = _indice('N° 40')
-I_N200 = _indice('N° 200')
+
+_I_BASE = indices_de(SIEVES)
 
 
-def calcular_granulometria(d):
-    """d: {'total': texto|None, 'pesos': N_TAMICES pesos retenidos}.
+def calcular_granulometria(d, serie=None):
+    """d: {'total': texto|None, 'pesos': pesos retenidos}.
 
-    La lista se normaliza a N_TAMICES elementos: si viene corta, como cuando
-    se carga un archivo .json de la versión anterior (que tenía un tamiz menos),
-    se rellena con None en vez de acortar la curva, porque si no el fondo
-    quedaría corrido una fila y los %salían mal. El fondo se calcula restando
-    la suma del total; no se escribe.
+    `serie` es la lista de tamices que aplica (ver `serie_para`). Sin ella se
+    usa la de suelos, que es la base general.
+
+    Los pesos se normalizan al número de tamices de la serie: si vienen cortos,
+    como cuando se carga un archivo .json de otra versión, se rellena con None
+    en vez de acortar la curva, porque si no el fondo quedaría corrido una fila
+    y los % saldrían mal. El fondo se calcula restando la suma del total; no se
+    escribe.
     """
+    serie = serie or SIEVES_SUELOS
+    n = n_tamices_de(serie)
+    idx = indices_de(serie)
+    diam = [d0 for _, d0 in serie]
     total = fnum(d.get("total"))
-    pesos = list(d["pesos"])[:N_TAMICES]
-    pesos += [None] * (N_TAMICES - len(pesos))
+    pesos = list(d["pesos"])[:n]
+    pesos += [None] * (n - len(pesos))
     sumw = sum(w for w in pesos if w is not None)
     fondo = (total - sumw) if total is not None else None
     total_ef = total if total is not None else sumw
@@ -85,7 +166,7 @@ def calcular_granulometria(d):
             pasa = 0.0
         F.append(pasa)
         sieve.append({
-            "tamiz": SIEVES[i][0], "diam": DIAM[i], "w": w,
+            "tamiz": serie[i][0], "diam": diam[i], "w": w,
             "ret_p": ret_p,
             "acum_p": (cum / total_ef * 100) if total_ef else None,
             "pasa": pasa,
@@ -97,7 +178,7 @@ def calcular_granulometria(d):
             if a is None or b is None:
                 continue
             if a >= P >= b:
-                d1, d2 = DIAM[k], DIAM[k + 1]
+                d1, d2 = diam[k], diam[k + 1]
                 if d2 <= 0:
                     return None
                 return math.pow(10, math.log10(d1) + (math.log10(d2) - math.log10(d1)) * (P - a) / (b - a))
@@ -108,8 +189,8 @@ def calcular_granulometria(d):
     cc = (d30 ** 2 / (d60 * d10)
           if (d60 and d30 is not None and d10 is not None and d60 * d10 > 0) else None)
 
-    # Por nombre, no por posición: ver `_indice`.
-    F4, F200 = F[I_N4], F[I_N200]
+    # Por nombre, no por posición: ver `indices_de`.
+    F4, F200 = F[idx["n4"]], F[idx["n200"]]
     grava = (100 - F4) if F4 is not None else None
     arena = (F4 - F200) if (F4 is not None and F200 is not None) else None
     tipo = ("GRANULAR" if F200 <= 35 else "FINO") if F200 is not None else None
@@ -118,7 +199,7 @@ def calcular_granulometria(d):
         "fondo": fondo, "sum_ret": sumw, "sieve": sieve, "F": F,
         "d60": d60, "d30": d30, "d10": d10, "cu": cu, "cc": cc,
         "grava": grava, "arena": arena, "finos": F200, "tipo": tipo,
-        "f4": F4, "f10": F[I_N10], "f40": F[I_N40], "f200": F200,
+        "f4": F4, "f10": F[idx["n10"]], "f40": F[idx["n40"]], "f200": F200,
     }
 
 
@@ -188,9 +269,18 @@ class Granulometria(Seccion):
         self.v_w2l = tk.StringVar()
         self.v_fondo = tk.StringVar()
         self.v_fondo.set("auto")
-        self.peso_vars = [tk.StringVar() for _ in SIEVES[:-1]]
+        #: Serie de tamices vigente. Arranca con la de suelos y la cambia la
+        #: app según el tipo de muestra y su alcance (`set_serie`).
+        self._serie = list(SIEVES_SUELOS)
+        self._n = n_tamices_de(self._serie)
+        #: Un variable por tamiz y tres de resultados, con la serie más ancha
+        #: (suelos, 12 tamices). Las series de control de calidad tienen menos,
+        #: y las que sobran quedan en "" para no perder lo ya escrito al
+        #: cambiar de alcance y volver.
+        self.peso_vars = [tk.StringVar() for _ in range(N_TAMICES)]
         self.registrar(*self.peso_vars)
-        self.v_res = [[tk.StringVar() for _ in range(3)] for _ in range(len(SIEVES))]
+        self.v_res = [[tk.StringVar() for _ in range(3)]
+                      for _ in range(len(SIEVES_SUELOS))]
 
         self._build_pesos()
         self._build_cuerpo()
@@ -251,31 +341,96 @@ class Granulometria(Seccion):
 
     def _build_tabla(self, tabla):
         for c, (texto, uni) in enumerate((
-                ("Tamiz", None), ("\u00d8", "mm"), ("Peso ret.", "g"),
+                ("Tamiz", None), ("Ø", "mm"), ("Peso ret.", "g"),
                 ("% Ret.", None), ("% Acum.", None), ("% Pasa", None))):
             self._cabecera(tabla, c, texto, negra=True, unidad=uni)
             tabla.columnconfigure(c, weight=1, uniform="granos")
-        self._inputs = []
-        for i, (tam, d) in enumerate(SIEVES):
+        #: Entries de peso, en el orden de las filas, para la navegación con
+        #: ↑↓ y Enter. Se guardan aparte de `_inputs_visibles` porque el
+        #: recorrido es sobre las casillas de la serie vigente.
+        self._entradas_peso = []
+        #: Piezas de cada fila (etiquetas y cajas), para poderlas mostrar u
+        #: ocultar juntas al cambiar de serie.
+        self._piezas_fila = {}
+        #: Entry de peso de cada fila de la serie base, por posición, para
+        #: reconstruir la navegación cuando cambia la serie.
+        self._peso_entry = {}
+        for i, (tam, d) in enumerate(SIEVES_SUELOS):
             r = i + 1
-            tk.Label(tabla, text=tam, bg=CARD, fg=TXT,
-                     font=(FAM_UI, 10)).grid(row=r, column=0, sticky="w",
-                                                padx=2, pady=2)
-            tk.Label(tabla, text="%g" % d, bg=CARD, fg=TXT,
-                     font=(FAM_UI, 10)).grid(row=r, column=1, sticky="w",
-                                                padx=2, pady=2)
+            lbl = tk.Label(tabla, text=tam, bg=CARD, fg=TXT,
+                           font=(FAM_UI, 10))
+            lbl.grid(row=r, column=0, sticky="w", padx=2, pady=2)
+            lbl_d = tk.Label(tabla, text="%g" % d, bg=CARD, fg=TXT,
+                             font=(FAM_UI, 10))
+            lbl_d.grid(row=r, column=1, sticky="w", padx=2, pady=2)
             if tam == "FONDO":
                 frm, num = self.caja(tabla, self.v_fondo, editable=False)
-                frm.grid(row=r, column=2, sticky="ew", padx=2, pady=2)
                 self._fondo_num = num
+                frm.grid(row=r, column=2, sticky="ew", padx=2, pady=2)
+                piezas = [lbl, lbl_d, frm]
             else:
                 frm, num = self.caja(tabla, self.peso_vars[i], editable=True)
+                self._entradas_peso.append(num)
+                self._peso_entry[i] = num
                 frm.grid(row=r, column=2, sticky="ew", padx=2, pady=2)
-                self._inputs.append(num)
+                piezas = [lbl, lbl_d, frm]
             for c in range(3):
-                frm, num = self.caja(tabla, self.v_res[i][c],
-                                     editable=False, ancho=8)
-                frm.grid(row=r, column=3 + c, sticky="ew", padx=2, pady=2)
+                frm_res, _ = self.caja(tabla, self.v_res[i][c],
+                                       editable=False, ancho=8)
+                frm_res.grid(row=r, column=3 + c, sticky="ew", padx=2, pady=2)
+                piezas.append(frm_res)
+            self._piezas_fila[i] = piezas
+        self._inputs = list(self._entradas_peso[:self._n])
+
+    # ---------------- serie de tamices ----------------
+    def set_serie(self, serie):
+        """Cambia la serie de tamices de la tabla.
+
+        La serie de una muestra de control de calidad tiene menos tamices: a
+        afirmados y a bases les falta el 1/2". Las filas que sobran se ocultan
+        con `grid_remove` y no se destruyen, así los valores escritos quedan en
+        sus variables y al volver a suelos se recuperan.
+        """
+        serie = list(serie)
+        if serie == self._serie:
+            return
+        self._serie = serie
+        self._n = n_tamices_de(serie)
+        # Las filas se muestran por NOMBRE de tamiz, no por posición. Las
+        # series no tienen la misma lista: a afirmados y a bases les falta el
+        # 1/2", y a subbases el 3/4". Con posición, la fila del 1/2" se
+        # corresponde con el 3/8" de la otra serie y se mostraría el tamiz
+        # equivocado.
+        en_serie = {n for n, _ in serie}
+        self._entradas_peso = []
+        for i, (nombre, _d) in enumerate(SIEVES_SUELOS):
+            piezas = self._piezas_fila[i]
+            if nombre in en_serie:
+                for p in piezas:
+                    p.grid()
+                if nombre != "FONDO":
+                    self._entradas_peso.append(self._peso_entry[i])
+            else:
+                for p in piezas:
+                    p.grid_remove()
+        # La navegación con ↑↓ y Enter recorre solo las filas visibles.
+        self._inputs = list(self._entradas_peso[:self._n])
+        self._bind_navegacion()
+        # Los resultados mostrados eran de la serie anterior: se limpian, y lo
+        # mismo el fondo, que se recalcula con la serie nueva.
+        for fila in self.v_res:
+            for col in fila:
+                col.set("")
+        self.v_fondo.set("auto")
+        self._fondo_num.config(fg=MUT)
+
+    def serie(self):
+        """Serie de tamices vigente."""
+        return self._serie
+
+    def n_tamices(self):
+        """Cuántos tamices con peso se digitan en la serie vigente."""
+        return self._n
 
     # ---------------- casillas y teclado ----------------
     def caja(self, parent, var, unidad="", editable=True, ancho=7):
@@ -343,9 +498,14 @@ class Granulometria(Seccion):
 
     # ----------------------------------------------------------------
     def leer(self):
-        pesos = []
-        for v in self.peso_vars:
-            pesos.append(fnum(v.get()))
+        """Pesos de los tamices de la serie vigente.
+
+        Los valores de las filas ocultas (las que no están en la serie de
+        control de calidad) no se devuelven: si se leyeran, el peso del tamiz
+        que no se tamizó se sumaría al total y el fondo saldría mal. Se
+        guardan en sus variables para recuperarlos al volver a soils.
+        """
+        pesos = [fnum(self.peso_vars[i].get()) for i in range(self._n)]
         return {"total": None, "pesos": pesos}
 
     def mostrar(self, res):
@@ -379,9 +539,69 @@ class Granulometria(Seccion):
         self.mostrar_aviso(corto, detalle)
 
     def cargar(self, ejemplo):
+        """Vuelca los pesos de un archivo o un ejemplo en la serie vigente.
+
+        Los pesos llegan en el orden de la serie del archivo, que puede no ser
+        la vigente: si el archivo es de suelos y ahora se está en afirmados, o
+        al revés, se reencuadran por nombre de tamiz. Sin eso, el peso del
+        1/2" de una muestra de suelos aparecería en la fila del 3/8" al abrirla
+        como muestra de control de calidad, falseando la curva.
+        """
         g = ejemplo["grano"]
-        for i, v in enumerate(self.peso_vars):
-            v.set("" if g["pesos"][i] is None else str(g["pesos"][i]))
+        pesos = list(g.get("pesos") or [])
+        serie_origen = ejemplo.get("serie")
+        if serie_origen and list(serie_origen) != list(self._serie):
+            self._set_pesos_por_nombre(pesos, serie_origen)
+        else:
+            # Misma serie: se copia por posición. Si aun así llega más corto
+            # (un archivo de una versión anterior), las casillas sobrantes
+            # quedan en blanco.
+            for i, v in enumerate(self.peso_vars):
+                v.set("" if i >= len(pesos) or pesos[i] is None
+                      else str(pesos[i]))
+
+    def _set_pesos_por_nombre(self, pesos, serie_origen):
+        """Reencuadra los pesos a la serie vigente, casillas por nombre.
+
+        Un tamiz que está en una serie y no en la otra no es cero: si no se
+        tamizó, el material que se habría retenido en él pasó al tamiz
+        siguiente más fino que sí está en la serie. Así que su peso se suma al
+        de ese tamiz.
+
+        Por ejemplo, al pasar una curva de suelos (que tiene el 1/2") a la
+        serie de afirmados (que no), el retenido del 1/2" va al 3/8", que es el
+        siguiente. Si en vez de sumar se descartara, el total de la muestra
+        bajaría y el fondo artificially absorbería esa masa.
+        """
+        valor = {nombre: (pesos[i] if i < len(pesos) else None)
+                 for i, (nombre, _) in enumerate(serie_origen)}
+        # De mayor a menor, para poder correr el peso al tamiz más fino que sí
+        # está en la serie vigente.
+        en_vigente = {n for n, _ in self._serie}
+        for nombre, v in valor.items():
+            if v is None or nombre in en_vigente or nombre == "FONDO":
+                continue
+            # Por diámetro: el orden de los nombres ('1"' antes que '3/4"') no sirve para
+            # comparar tamanos, así que se busca el siguiente más fino de la
+            # serie vigente.
+            destino = self._siguiente_mas_fino(nombre)
+            if destino is None:
+                continue
+            previo = valor.get(destino) or 0.0
+            valor[destino] = round(previo + v, 1)
+        for i, (nombre, _d) in enumerate(self._serie[:-1]):
+            v = valor.get(nombre)
+            self.peso_vars[i].set("" if v is None else str(v))
+
+    def _siguiente_mas_fino(self, nombre):
+        """Primer tamiz de la serie vigente más fino que `nombre`."""
+        diam = dict(self._serie)
+        if nombre not in diam:
+            return None
+        d0 = diam[nombre]
+        candidatos = [(d, n) for n, d in self._serie
+                      if n != "FONDO" and d < d0]
+        return min(candidatos)[1] if candidatos else None
 
     def limpiar(self):
         super().limpiar()

@@ -16,7 +16,7 @@ from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D,
 
 from secciones.humedad import Humedad
 from secciones.limites import Limites
-from secciones.granulometria import Granulometria, N_TAMICES, POS_1_2
+from secciones.granulometria import Granulometria, serie_para
 from motor.calculo import calcular as motor_calcular, fnum
 from datos_ejemplo import datos_ejemplo, SIMBOLOS
 
@@ -488,6 +488,20 @@ class App(tk.Tk):
             self.sel_graduacion.set(elegido)
             self._familia_grad = alcance
         self._empacar(self._caja_graduacion, es_cc and bool(graduaciones))
+
+        # La tabla de granulometría sigue a la serie del alcance. Sin esto, una
+        # muestra de afirmados se tamizaría con la serie de suelos: se
+        # escribiría un peso en el 1/2" que no se tamizó, y ese peso sumaría al
+        # total con un % retenido falso.
+        #
+        # La sección de granulometría todavía no existe en el primer llamado:
+        # la caja de Muestra se construye antes que ella. Se comprueba, en vez
+        # de confiar en el orden, porque el orden es justo lo que no conviene
+        # hacer depender de un detalle así.
+        grano = getattr(self, "grano", None)
+        if grano is not None:
+            grano.set_serie(serie_para(
+                self.TIPO_CC if es_cc else self.TIPO_SUELOS, alcance))
 
     @staticmethod
     def _empacar(caja, visible):
@@ -1056,10 +1070,21 @@ class App(tk.Tk):
         self._ajustar_desc()
 
     def _datos(self):
+        """Datos del ensayo, con la serie de tamices que corresponde.
+
+        `tipo` y `alcance` viajan en el bloque de granulometría, y no solo en la
+        identificación: el motor elige la serie de tamices con ellos. Si
+        faltaran, el cálculo usaría la serie de suelos para una muestra de
+        afirmados, y la curva saldría con tamices que no se tamizaron.
+        """
         lim = self.lim.leer()
+        tipo, alcance, _grad = self._tipo_alcance()
+        grano = self.grano.leer()
+        grano["tipo"] = tipo
+        grano["alcance"] = alcance
         return {"hum": self.hum.leer(), "ll": lim["ll"],
                 "ll_np": self.lim.sin_plasticidad(), "lp": lim["lp"],
-                "grano": self.grano.leer()}
+                "grano": grano}
 
     def _ident_dict(self):
         """Identificación como diccionario (no como lista de rótulos).
@@ -1080,17 +1105,22 @@ class App(tk.Tk):
     }
 
     def _aplicar_muestra(self, datos, ident):
-        """Vuelca una muestra en la interfaz (datos + identificación)."""
-        for sec in (self.hum, self.lim, self.grano):
-            sec.cargar(datos)
+        """Vuelca una muestra en la interfaz (datos + identificación).
+
+        El tipo y el alcance se ponen ANTES de cargar la granulometría: ellos
+        deciden la serie de tamices, así que la sección tiene que saber cuál
+        aplica antes de recibir los pesos. Al revés, una muestra de afirmados se
+        volcaría sobre la serie de suelos y el peso del 3/8" caería en la fila
+        del 1/2".
+        """
         for k, v in self.idvars.items():
             v.set("" if ident.get(k) is None else str(ident[k]))
         self.ident_desc.delete("1.0", "end")
         self.ident_desc.insert("1.0", ident.get("descripcion") or "")
         self._ajustar_desc()
         # El tipo va antes del alcance: al poner "Control de calidad" la traza
-        # muestra el selector de alcance, y solo entonces se puede dejar en la
-        # posición que traía el archivo.
+        # muestra el selector de alcance, y la del alcance fija la serie de
+        # tamices de la sección de granulometría.
         tipo = ident.get("tipo") or self.TIPO_SUELOS
         if tipo not in self.TIPOS_MUESTRA:
             tipo = self.TIPO_SUELOS
@@ -1110,6 +1140,10 @@ class App(tk.Tk):
             # Se apunta como elegida para esta familia, para que al pasar por
             # otra y volver no se pierda.
             self._grad_por_familia[self._familia_grad] = graduacion
+        # Ahora sí: la serie de tamices ya es la del archivo, y los pesos se
+        # reencuadran por nombre al cargarlos.
+        for sec in (self.hum, self.lim, self.grano):
+            sec.cargar(datos)
         self._refresh()
 
     def _abrir_muestra(self):
@@ -1152,15 +1186,6 @@ class App(tk.Tk):
         for k, n in (("ll", 3), ("lp", 2)):
             filas = datos[k]
             datos[k] = filas[:n] + [{} for _ in range(max(0, n - len(filas)))]
-        pesos = list(datos["grano"].get("pesos") or [])
-        # Un archivo de la versión anterior tenía 11 tamices, sin el 1/2".
-        # Con solo rellenar al final, el peso del 3/8" se corría una fila y
-        # quedaba como si fuera el del 1/2", falseando toda la curva. Se
-        # inserta el hueco en su lugar: el 1/2" va entre 3/4" y 3/8".
-        if len(pesos) == N_TAMICES - 1:
-            pesos.insert(POS_1_2, None)
-        datos["grano"]["pesos"] = pesos[:N_TAMICES] + [None] * max(
-            0, N_TAMICES - len(pesos))
         self._aplicar_muestra(datos, ident)
         messagebox.showinfo("Abrir muestra", "Muestra cargada:\n%s" % path)
 

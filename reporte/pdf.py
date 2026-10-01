@@ -40,19 +40,33 @@ _ROWH_WL = 12.5                     # alto de fila de la tabla de pesos/límites
 _ROWS_WL = 9                        # encabezado + 8 filas de datos
 _SECT_H_WL = _ROWS_WL * _ROWH_WL     # alto exacto de la sección wl-wp-block
 
-#: encabezado + las filas de `SIEVES` (12 tamices + el fondo). Tiene que
-#: cuadrar con `secciones.granulometria.SIEVES`; si algún día cambia la lista,
-#: `_chequear_filas_gr` avisa al importar en vez de recortar la tabla en
-#: silencio o dejar filas vacías.
-_GR_ROWS = 14
 _GR_ROWH = _ROWH_WL                   # la tabla de granulometría usa el mismo alto de fila
-_GR_BAND_TOP = _GR_ROWS * _GR_ROWH    # alto de tabla + resultados
 # banda inferior de parámetros granulométricos (W1/W2, D60..D10, Cu/Cc, %):
 _GR_BAND_GAP = 5.0                    # separación entre la tabla y la banda
 _GR_BAND_VH = 13.0                    # altura de las filas de datos de la banda
 _GR_BAND_PAD = 2.0                    # aire superior/inferior de la banda
 _GR_BAND_H = 2 * _GR_BAND_VH + 2 * _GR_BAND_PAD
-_SECT_H_GR = _GR_BAND_TOP + _GR_BAND_GAP + _GR_BAND_H
+
+
+def _alturas_gr(res):
+    """Alto de la sección de granulometría para esta muestra.
+
+    La tabla tiene una fila por tamiz de la serie vigente, y la serie de
+    control de calidad es más corta que la de suelos. El alto se calcula con
+    la serie que trae el resultado, en vez de con un número fijo: con el fijo,
+    una muestra de afirmados dejaría dos filas en blanco al pie de la tabla y
+    la banda de resultados quedaría desalineada del resto de secciones.
+
+    El sobrante que deja la tabla más corta no estira nada: la diagramación
+    apila las secciones de arriba abajo y el espacio que queda va entre el
+    cuerpo y el bloque de firmas (ver `_SECTIONS`).
+    """
+    filas = len(res.get("sieve") or ()) or 14
+    band_top = filas * _GR_ROWH
+    return band_top + _GR_BAND_GAP + _GR_BAND_H
+
+
+_SECT_H_GR = 14 * _GR_ROWH + _GR_BAND_GAP + _GR_BAND_H   # referencia: serie de suelos
 
 # altura fija de la sección de la curva granulométrica (pt): impuesta para
 # garantizar que la banda de firmas (anclada al fondo) conserve su espacio.
@@ -352,23 +366,22 @@ def _id_campo(datos, ident, key):
 
 
 def _tipo_muestra(datos, ident):
-    """(tipo, alcance, graduación) para el encabezado del reporte.
+    """(tipo, graduación) para el encabezado del reporte.
 
-    El tipo siempre tiene valor ("Suelos" por defecto). El alcance solo se
-    imprime en control de calidad, y la graduación solo cuando hay alcance que
-    la lleva: son los afirmados, las bases y las subbases. Una muestra de suelos
-    sale sin esas celdas en vez de salir con campos vacíos.
+    El tipo siempre tiene valor ("Suelos" por defecto). La graduación solo se
+    imprime en control de calidad, y solo en los alcances que la llevan
+    (afirmados, bases y subbases); en suelos, estructuras y drenajes, y
+    pavimentos asfálticos no aparece.
 
-    Las tres cadenas van en caja alta, como las demás celdas de datos del
-    encabezado: son valores fijos de una lista cerrada, y escribirlos como
-    vienen dejaría la fila mezclando "Control de calidad" con "A-38".
+    Ambas van en caja alta, como las demás celdas de datos del encabezado: son
+    valores fijos de una lista cerrada, y escribirlos como venían dejaría la fila
+    mezclando "Control de calidad" con "A-38".
     """
     tipo = (_id_campo(datos, ident, "tipo") or "Suelos").strip()
     es_cc = (tipo.lower() != "suelos")
-    alcance = (_id_campo(datos, ident, "alcance") or "").strip() if es_cc else ""
     graduacion = ((_id_campo(datos, ident, "graduacion") or "").strip()
-                  if alcance else "")
-    return (tipo.upper(), alcance.upper(), graduacion.upper())
+                  if es_cc else "")
+    return tipo.upper(), graduacion.upper()
 
 
 def _desc_material(datos, res, ident):
@@ -479,10 +492,14 @@ def _filas_ident(datos, res, ident):
     f_ejec = _id_campo(datos, ident, "fecha_ejecucion")
     prof = _profundidad(datos, ident)
     desc = _desc_material(datos, res, ident)
-    tipo, alcance, graduacion = _tipo_muestra(datos, ident)
+    tipo, graduacion = _tipo_muestra(datos, ident)
 
-    celdas_alcance = ([("label", "ALCANCE", "L2", "L3"),
-                       ("centro", alcance, "L3", 1.0)] if alcance else [])
+    # El alcance no se imprime: la graduación lo encarna ("BG-38" dice base y
+    # no subbase), y el usuario pidió que en esa fila aparezca solo el tipo de
+    # graduación. La fila se completa con el valor centrado en el ancho que
+    # ocupaba el alcance, para que no quede un hueco a la derecha.
+    celdas_grad = ([("label", "GRADACIÓN", "L2", "L3"),
+                    ("centro", graduacion, "L3", 1.0)] if graduacion else [])
     filas = [
         # (es_larga, celdas); los rótulos de las columnas son nombres, no
         # números: las fracciones las pone quien dibuja, con la misma grilla.
@@ -496,15 +513,10 @@ def _filas_ident(datos, res, ident):
         (False, [("label", "PERFORACIÓN", 0, "L1"), ("centro", perf, "L1", "L2"),
                  ("label", "PROFUNDIDAD", "L2", "L3"), ("centro", prof, "L3", 1.0)]),
         (False, [("label", "TIPO", 0, "L1"), ("centro", tipo, "L1", "L2")]
-                 + celdas_alcance),
+                 + celdas_grad),
+        (True, [("label", "DESCRIPCIÓN MATERIAL", 0, "L1"),
+                ("desc", desc, "L1", 1.0)]),
     ]
-    # La graduación solo existe si hay una: son tres filas extra en el informe
-    # de un material granular controlado.
-    if graduacion:
-        filas.append((False, [("label", "TIPO DE GRADUACIÓN", 0, "L1"),
-                              ("centro", graduacion, "L1", 1.0)]))
-    filas.append((True, [("label", "DESCRIPCIÓN MATERIAL", 0, "L1"),
-                         ("desc", desc, "L1", 1.0)]))
     return filas
 
 
@@ -550,7 +562,7 @@ def _alturas(datos, res, ident, CH):
         elif s[0] == "wl-wp-block":
             hs.append(_SECT_H_WL)
         elif s[0] == "granulometria-block":
-            hs.append(_SECT_H_GR)
+            hs.append(_alturas_gr(res))
         elif s[0] == "grain-size-chart":
             hs.append(_SECT_H_CHART)
         else:
@@ -1124,7 +1136,8 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
     La tabla replica la estética de límites/humedad: usa la misma altura de
     fila (_GR_ROWH), la grilla queda completa (verticales también en la fila
     de encabezado) y el alto de la sección se ajusta exacto al número de
-    filas (_SECT_H_GR). De esta forma todas las filas tienen la misma altura.
+    filas de la serie vigente (`_alturas_gr`). De esta forma todas las filas
+    tienen la misma altura y la tabla no deja filas en blanco.
     La sección de resultados se dibuja con las mismas fuentes/tamaños de la
     tabla (TAB_SIZE 7.5 / TAB_SIZE_LABEL 7.0) y cada variable ocupa su propia
     fila."""
@@ -1139,13 +1152,17 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
     HDR_SIZE = 6.6                            # títulos del encabezado de bloque
     PADX = 3.0                                # aire horizontal de las celdas
     f_tab = 0.70                              # la tabla ocupa el 70 % del ancho
-    ROWS = _GR_ROWS                           # encabezado + tamices + fondo
+    # Encabezado + una fila por tamiz de la serie vigente. Con un número fijo
+    # quedaban filas en blanco al pie de una muestra de control de calidad, que
+    # tiene menos tamices, y la grilla se cerraba más abajo que el contenido.
+    sieve = res.get("sieve") or []
+    ROWS = len(sieve) + 1 if sieve else 14
     rh = _GR_ROWH                             # 12.5 pt, igual que límites
     NC = 6                                    # columnas de la tabla
 
     x, y, w, h = box
     top = y + h
-    htab = _GR_BAND_TOP                      # alto de tabla + resultados
+    htab = ROWS * rh                         # alto de tabla + resultados
     y_tab = top - htab                       # borde inferior de tabla + resultados
     tw = f_tab * w
     rx = x + tw + GAP                         # borde izquierdo de resultados
@@ -1175,15 +1192,6 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
                             _clip(c, t, fnb, HDR_SIZE, cwest - PADX))
 
     # cuerpo: una fila por tamiz (+ fondo)
-    sieve = res.get("sieve") or []
-    # La tabla tiene alto fijo: si llegar más filas de las que caben, se
-    # dibujaría la grilla encima de los textos. Se avisa en vez de fallar
-    # Callado, que es lo que pasaba cuando `_GR_ROWS` no cuadraba con SIEVES.
-    if len(sieve) + 1 > ROWS:
-        raise ValueError(
-            "La tabla de granulometría espera %d filas y llegaron %d. "
-            "Hay que actualizar _GR_ROWS en reporte/pdf.py."
-            % (ROWS - 1, len(sieve)))
     c.setFont(fn, TAB_SIZE)
     for i, s in enumerate(sieve, start=1):
         yb = hedr - i * rh                   # borde inferior de la fila
