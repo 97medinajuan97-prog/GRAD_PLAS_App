@@ -95,6 +95,11 @@ def n_tamices_de(serie):
     return len(serie) - 1
 
 
+def nombres_de(serie):
+    """Nombres de tamiz de una serie, venga como [(nombre, mm)] o como [nombre]."""
+    return [(s[0] if isinstance(s, (tuple, list)) else s) for s in serie]
+
+
 #: posición del 1/2" dentro de la serie base. La necesitan quienes leen un
 #: archivo de muestra de la versión anterior, que no tenía ese tamiz: el hueco
 #: va aquí, no al final, o los pesos siguientes se corren una fila y el 3/8"
@@ -519,7 +524,8 @@ class Granulometria(Seccion):
         valor = {nombre: fnum(self.peso_vars[i].get())
                  for i, (nombre, _d) in enumerate(SIEVES_SUELOS[:-1])}
         pesos = [valor.get(nombre) for nombre, _d in self._serie[:-1]]
-        return {"total": None, "pesos": pesos}
+        return {"total": None, "pesos": pesos,
+                "serie": [nombre for nombre, _d in self._serie[:-1]]}
 
     def mostrar(self, res):
         gt = res.get("g_total")
@@ -554,24 +560,34 @@ class Granulometria(Seccion):
     def cargar(self, ejemplo):
         """Vuelca los pesos de un archivo o un ejemplo en la serie vigente.
 
-        Los pesos llegan en el orden de la serie del archivo, que puede no ser
-        la vigente: si el archivo es de suelos y ahora se está en afirmados, o
-        al revés, se reencuadran por nombre de tamiz. Sin eso, el peso del
-        1/2" de una muestra de suelos aparecería en la fila del 3/8" al abrirla
-        como muestra de control de calidad, falseando la curva.
+        Los pesos SIEMPRE se reencuadran por nombre de tamiz, nunca por
+        posición. `peso_vars` está en el orden de la serie base (suelos), que
+        tiene una fila más que las series de control de calidad: copiarlas por
+        posición dejaba el peso del 3/8" en la casilla del 1/2" (que está
+        oculta) y corría todos los siguientes. Al guardar y volver a abrir una
+        muestra de bases, los retenidos no volvían a su casilla.
+
+        Un archivo sin la clave `serie` (uno viejo) se interpreta con la serie
+        vigente, que es lo correcto: se guardó con los tamices que se están
+        viendo en pantalla.
         """
         g = ejemplo["grano"]
         pesos = list(g.get("pesos") or [])
-        serie_origen = ejemplo.get("serie")
-        if serie_origen and list(serie_origen) != list(self._serie):
-            self._set_pesos_por_nombre(pesos, serie_origen)
-        else:
-            # Misma serie: se copia por posición. Si aun así llega más corto
-            # (un archivo de una versión anterior), las casillas sobrantes
-            # quedan en blanco.
-            for i, v in enumerate(self.peso_vars):
-                v.set("" if i >= len(pesos) or pesos[i] is None
-                      else str(pesos[i]))
+        serie_origen = list(g.get("serie") or [n for n, _ in self._serie])
+        self._set_pesos_por_nombre(pesos, serie_origen)
+
+    def peso_var_de(self, nombre):
+        """Variable de un tamiz por su nombre.
+
+        `peso_vars` está en el orden de la serie base y las filas en pantalla
+        van en el de la serie vigente: son índices distintos. Cualquier código
+        que necesite la casilla de un tamiz pasa por aquí en vez de adivinar
+        la posición.
+        """
+        for i, (n, _d) in enumerate(SIEVES_SUELOS):
+            if n == nombre and i < len(self.peso_vars):
+                return self.peso_vars[i]
+        raise KeyError("El tamiz %r no está en la serie base." % nombre)
 
     def _set_pesos_por_nombre(self, pesos, serie_origen):
         """Reencuadra los pesos a la serie vigente, casillas por nombre.
@@ -587,7 +603,7 @@ class Granulometria(Seccion):
         bajaría y el fondo artificially absorbería esa masa.
         """
         valor = {nombre: (pesos[i] if i < len(pesos) else None)
-                 for i, (nombre, _) in enumerate(serie_origen)}
+                 for i, nombre in enumerate(nombres_de(serie_origen))}
         # De mayor a menor, para poder correr el peso al tamiz más fino que sí
         # está en la serie vigente.
         en_vigente = {n for n, _ in self._serie}
@@ -602,9 +618,14 @@ class Granulometria(Seccion):
                 continue
             previo = valor.get(destino) or 0.0
             valor[destino] = round(previo + v, 1)
-        for i, (nombre, _d) in enumerate(self._serie[:-1]):
+        # Se escribe POR NOMBRE, con `peso_var_de`. Escribir con
+        # `peso_vars[i]` usando el índice de la serie vigente ponía el 3/8" en
+        # la casilla del 1/2" (que está oculta) y corría todos los
+        # siguientes: al guardar y reabrir, los retenidos no volvían a su
+        # casilla.
+        for nombre, _d in self._serie[:-1]:
             v = valor.get(nombre)
-            self.peso_vars[i].set("" if v is None else str(v))
+            self.peso_var_de(nombre).set("" if v is None else str(v))
 
     def _siguiente_mas_fino(self, nombre):
         """Primer tamiz de la serie vigente más fino que `nombre`."""

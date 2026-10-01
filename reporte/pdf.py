@@ -508,18 +508,27 @@ def _partir(c, txt, font, size, maxw, maxlineas=8):
     return lineas or [""]
 
 
-#: Las dos filas de texto largo van acotadas a MAX_LINEAS_IDENT renglones. Las
-#: de datos pareados (sector, fechas, tipo) no se envuelven.
+#: guion con que se marca un campo sin dato en la identificación. Las celdas
+#: vacías se leave en blanco y no se sabe si es un olvido o que ese dato no
+#: aplica a la muestra; el guion lo dice sintapujar la atención.
+SIN_DATO = "—"
+
 _FILA_LARGA = (True, MAX_LINEAS_IDENT)
 
 
 def _filas_ident(datos, res, ident):
     """Definición de las filas de la tabla de identificación.
 
-    La usan las dos funciones de la sección: la que dibuja y la que mide. Si
+La usan las dos funciones de la sección: la que dibuja y la que mide. Si
     construyeran la lista por separado, agregar una fila en una y no en la otra
     descuadraría la tabla sin que nada avise.
+
+    Un campo sin dato se imprime con un guion (`SIN_DATO`), no en blanco: en
+    blanco no se distingue de una celda que se olvidó llenar.
     """
+    def d(v):
+        return v if (v or "").strip() else SIN_DATO
+
     proy = _id_campo(datos, ident, "proyecto")
     orden = _id_campo(datos, ident, "ordenado")
     sect = _id_campo(datos, ident, "sector")
@@ -538,27 +547,28 @@ def _filas_ident(datos, res, ident):
     celdas_grad = ([("label", "GRADACIÓN", "L2", "L3"),
                     ("centro", graduacion, "L3", 1.0)] if graduacion else [])
     filas = [
-        # (es_larga, celdas); los rótulos de las columnas son nombres, no
-        # números: las fracciones las pone quien dibuja, con la misma grilla.
-        # `_FILA_LARGA` es (True, MAX_LINEAS_IDENT): el True dice que la fila
-        # es de texto largo, y el número acota sus renglones.
+        # (es_larga, celdas, tope_de_renglones); los rótulos de las columnas
+        # son nombres, no números: las fracciones las pone quien dibuja, con
+        # la misma grilla.
+        # `_FILA_LARGA[0]` dice que la fila es de texto largo y su número acota
+        # los renglones.
         (_FILA_LARGA[0],
-         [("label", "PROYECTO", 0, "L1"), ("texto", proy, "L1", 1.0)],
+         [("label", "PROYECTO", 0, "L1"), ("texto", d(proy), "L1", 1.0)],
          _FILA_LARGA[1]),
         (_FILA_LARGA[0],
-         [("label", "ORDENADO POR", 0, "L1"), ("texto", orden, "L1", 1.0)],
+         [("label", "ORDENADO POR", 0, "L1"), ("texto", d(orden), "L1", 1.0)],
          _FILA_LARGA[1]),
-        (False, [("label", "SECTOR", 0, "L1"), ("centro", sect, "L1", "L2"),
-                 ("label", "MUESTRA", "L2", "L3"), ("centro", mues, "L3", 1.0)], 0),
-        (False, [("label", "FECHA DE TOMA", 0, "L1"), ("centro", f_toma, "L1", "L2"),
+        (False, [("label", "SECTOR", 0, "L1"), ("centro", d(sect), "L1", "L2"),
+                 ("label", "MUESTRA", "L2", "L3"), ("centro", d(mues), "L3", 1.0)], 0),
+        (False, [("label", "FECHA DE TOMA", 0, "L1"), ("centro", d(f_toma), "L1", "L2"),
                  ("label", "FECHA DE EJECUCIÓN", "L2", "L3"),
-                 ("centro", f_ejec, "L3", 1.0)], 0),
-        (False, [("label", "PERFORACIÓN", 0, "L1"), ("centro", perf, "L1", "L2"),
-                 ("label", "PROFUNDIDAD", "L2", "L3"), ("centro", prof, "L3", 1.0)], 0),
+                 ("centro", d(f_ejec), "L3", 1.0)], 0),
+        (False, [("label", "PERFORACIÓN", 0, "L1"), ("centro", d(perf), "L1", "L2"),
+                 ("label", "PROFUNDIDAD", "L2", "L3"), ("centro", d(prof), "L3", 1.0)], 0),
         (False, [("label", "TIPO", 0, "L1"), ("centro", tipo, "L1", "L2")]
                  + celdas_grad, 0),
         (_FILA_LARGA[0],
-         [("label", "DESCRIPCIÓN MATERIAL", 0, "L1"), ("desc", desc, "L1", 1.0)],
+         [("label", "DESCRIPCIÓN MATERIAL", 0, "L1"), ("desc", d(desc), "L1", 1.0)],
          _FILA_LARGA[1]),
     ]
     return filas
