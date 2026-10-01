@@ -1577,19 +1577,32 @@ def _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts_curva):
     inf_t = _catmull_rom(inf_p)
     sup_t = _catmull_rom(sup_p)
 
-    def _sigue(p, tramos, al_reves=False):
-        """Acuza sobre `p` los tramos, de izquierda a derecha o al revés."""
-        if not al_reves:
-            p.moveTo(tramos[0][0][0], tramos[0][0][1])
-            for _p1, c1, c2, p2 in tramos:
-                p.curveTo(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
+    def _sigue(p, tramos, al_reves=False, nuevo=True):
+        """Acusa sobre `p` los tramos, de izquierda a derecha o al revés.
+
+        `nuevo` decide cómo entra: con `moveTo` abre un subcamino y con `lineTo`
+        se sigue en el que ya está abierto. No es lo mismo y la diferencia se ve:
+
+        el relleno de la franja tiene que ser UN solo camino, la inferior de un
+        lado y la superior del otro. Si la superior entra con `moveTo` quedan
+        dos subcaminos, y al rellenar cada uno se cierra por su cuenta con una
+        recta de vuelta a su punto de partida. Esas rectas cruzan toda la gráfica
+        y el relleno sale como la unión de dos zonas curvas en vez de la franja,
+        que es justo lo que se veía: más pintado de lo debido.
+        """
+        entra = p.moveTo if nuevo else p.lineTo
+        if al_reves:
+            # Arranca donde termina la línea: su punto más fino.
+            ini = tramos[-1][3]
+            entra(ini[0], ini[1])
+            # Invertir una cúbica es arrancar donde terminaba, con los dos puntos
+            # de control en orden contrario. No hay que recalcular nada.
+            for a, c1, c2, _fin in reversed(tramos):
+                p.curveTo(c2[0], c2[1], c1[0], c1[1], a[0], a[1])
             return
-        # Al revés: el mismo tramo con los extremos y los controles cambiados de
-        # sitio. Invertir una cúbica es arrancar donde terminaba, con los dos
-        # puntos de control en orden contrario, así que no hay que recalcular nada.
-        p.moveTo(tramos[-1][3][0], tramos[-1][3][1])
-        for ini, c1, c2, fin in reversed(tramos):
-            p.curveTo(c2[0], c2[1], c1[0], c1[1], ini[0], ini[1])
+        entra(tramos[0][0][0], tramos[0][0][1])
+        for _p1, c1, c2, p2 in tramos:
+            p.curveTo(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
 
     # franja entre las dos líneas, con las mismas curvas que se van a trazar
     c.saveState()
@@ -1597,7 +1610,7 @@ def _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts_curva):
     c.setFillAlpha(0.16)
     p = c.beginPath()
     _sigue(p, inf_t)
-    _sigue(p, sup_t, al_reves=True)
+    _sigue(p, sup_t, al_reves=True, nuevo=False)
     p.close()
     c.drawPath(p, stroke=0, fill=1)
     c.restoreState()
