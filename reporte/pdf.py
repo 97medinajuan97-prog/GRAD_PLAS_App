@@ -51,10 +51,9 @@ _GR_BAND_H = 2 * _GR_BAND_VH + 2 * _GR_BAND_PAD
 #:
 #: Con el GAP general de 5 pt, la banda de parámetros (W1/W2, Cu/Cc) y la tabla
 #: de denominaciones de la curva (GRAVA | ARENA | LIMO Y ARCILLA) quedaban a
-#: 10 pt, y se leían como un solo bloque de líneas. Ninguna de las dos cajas
-#: se invade, pero la separación no alcanza para decir dónde acaba una y
-#: empieza la otra. Este aire va entre las dos, no dentro de ninguna.
-_GR_CHART_GAP = 12.0
+#: 10 pt, y se leían como un solo bloque de líneas. Subido a 12 seguían
+#: pegadas; a 18 la curva se despega y las dos cajas se leen separadas.
+_GR_CHART_GAP = 18.0
 
 
 def _alturas_gr(res):
@@ -403,6 +402,11 @@ def _tipo_muestra(datos, ident):
     graduacion = ((_id_campo(datos, ident, "graduacion") or "").strip()
                   if es_cc else "")
     return tipo.upper(), graduacion.upper()
+
+
+def _graduacion_de(datos, ident):
+    """Solo la graduación, sin el tipo. La zona de filtro la usa."""
+    return _tipo_muestra(datos, ident)[1]
 
 
 def _desc_material(datos, res, ident):
@@ -1478,6 +1482,84 @@ def _dib_granulometria(c, box, fn, fnb, datos, res):
 
 
 
+def _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts_curva):
+    """Proyecta sobre la curva la zona de filtro del material.
+
+    Son dos líneas de % que pasa, una por debajo de la especificación y otra
+    por encima, y la franja sombreada entre ellas. Se dibuja por debajo de la
+    curva: lo medido tiene que leerse por encima del límite, no al revés.
+
+    `pts_curva` son las coordenadas ya proyectadas de la curva del ensayo.
+
+    Ojo con el eje: XLOG devuelve x MÁS grande cuanto MÁS FINO es el tamiz
+    (100 mm a la izquierda, 0.01 mm a la derecha). La zona se dibuja sobre su
+    propio recorrido, del tamiz más grueso al más fino, y de ahí sale sola la
+    forma: la línea superior arranca en un tamiz más fino que la inferior, así
+    que el tramo que le falta se cierra con un horizontal al 100 %.
+
+    Sin graduación, o con una graduación de la que no hay zona cargada, no se
+    dibuja nada: una zona inventada sería peor que ninguna.
+    """
+    from reportlab.lib import colors as rlcolors
+    from motor.zonas import zona_de, puntos_de
+    if not isinstance(res, dict):
+        return
+    graduacion = res.get("graduacion") or ""
+    par = zona_de(graduacion)
+    if par is None:
+        return
+    sie = res.get("sieve") or []
+    diametros = {s["tamiz"]: s["diam"] for s in sie if s.get("diam")}
+    inf = puntos_de(par[0], diametros)
+    sup = puntos_de(par[1], diametros)
+    if len(inf) < 2 or len(sup) < 2:
+        return
+
+    # La línea superior no llega al tamiz más grueso de la inferior: ese
+    # tramo se cierra al 100 %, que es donde las dos coinciden en un material
+    # que cumple por arriba.
+    d_max_sup = sup[0][0]
+    sup = [(d, 100.0) for d, _p in inf if d > d_max_sup] + sup
+    if len(sup) < 2:
+        return
+
+    CL_ZONA = rlcolors.HexColor("#B8860B")   # ocre de la zona de filtro
+
+    def _proyecta(linea):
+        # De mayor a menor diámetro, que es de izquierda a derecha en el eje.
+        return [(XLOG(d), YP(p)) for d, p in linea]
+
+    inf_p = _proyecta(inf)
+    sup_p = _proyecta(sup)
+
+    # franja entre las dos líneas
+    c.saveState()
+    c.setFillColor(CL_ZONA)
+    c.setFillAlpha(0.16)
+    p = c.beginPath()
+    p.moveTo(inf_p[0][0], inf_p[0][1])
+    for x, y in inf_p[1:]:
+        p.lineTo(x, y)
+    for x, y in reversed(sup_p):
+        p.lineTo(x, y)
+    p.close()
+    c.drawPath(p, stroke=0, fill=1)
+    c.restoreState()
+
+    # las dos líneas de límite
+    c.saveState()
+    c.setStrokeColor(CL_ZONA)
+    c.setLineWidth(0.8)
+    c.setDash([2.5, 2.0], 0)
+    for linea in (inf_p, sup_p):
+        p = c.beginPath()
+        p.moveTo(linea[0][0], linea[0][1])
+        for x, y in linea[1:]:
+            p.lineTo(x, y)
+        c.drawPath(p, stroke=1, fill=0)
+    c.restoreState()
+
+
 def _dib_grain_size_chart(c, box, fn, fnb, res):
     """Curva granulom\u00e9trica de suelos (semilogar\u00edtmica).
 
@@ -1607,7 +1689,12 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
         xx = XLOG(d)
         c.line(xx, py0, xx, py1)
     c.setDash()
-    # 4) curva negra (Catmull-Rom, sutil, con 2 puntos control por tramo)
+    # 4) zona de filtro del material: dos líneas de % que pasa y la franja
+    #    entre ellas. Va bajo la curva para que se vea cuál es el dato medido y
+    #    cuál el límite de la especificación.
+    _dibujar_zona_filtro(c, XLOG, YP, px0, px1, py0, py1, res, pts)
+
+    # 5) curva negra (Catmull-Rom, sutil, con 2 puntos control por tramo)
     if len(pts) >= 2:
         def _seg(p0, p1, p2, p3):
             return ((p1[0], p1[1]),
@@ -1629,7 +1716,7 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
         c.setLineCap(1)
         c.drawPath(path, stroke=1, fill=0)
         c.setLineJoin(0); c.setLineCap(0)
-    # 5) puntos de datos: círculo azul macizo, sin borde negro y más pequeño.
+    # 6) puntos de datos: círculo azul macizo, sin borde negro y más pequeño.
     #    El borde negro sobre un trazo ya fino lo engordaba y los marcadores
     #    parecían más pesados que la propia curva.
     c.setFillColor(CL_BRAND)

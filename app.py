@@ -1084,15 +1084,22 @@ class App(tk.Tk):
         identificación: el motor elige la serie de tamices con ellos. Si
         faltaran, el cálculo usaría la serie de suelos para una muestra de
         afirmados, y la curva saldría con tamices que no se tamizaron.
+
+        La identificación también se incluye en el diccionario, porque el
+        reporte la lee de ahí (`_id_campo`) y sin ella el tipo salía siempre
+        como suelos: el PDF solo recibía la lista de rótulos, que no lleva
+        tipo, alcance ni graduación.
         """
         lim = self.lim.leer()
-        tipo, alcance, _grad = self._tipo_alcance()
+        tipo, alcance, grad = self._tipo_alcance()
         grano = self.grano.leer()
         grano["tipo"] = tipo
         grano["alcance"] = alcance
+        grano["graduacion"] = grad
+        ident = self._ident_dict()
         return {"hum": self.hum.leer(), "ll": lim["ll"],
                 "ll_np": self.lim.sin_plasticidad(), "lp": lim["lp"],
-                "grano": grano}
+                "grano": grano, "ident": ident}
 
     def _ident_dict(self):
         """Identificación como diccionario (no como lista de rótulos).
@@ -1335,7 +1342,12 @@ class App(tk.Tk):
                 % path):
             return
         try:
-            report_pdf(datos, res, self._ident(), path)
+            # Se pasa el diccionario de identificación, no la lista de
+            # rótulos: `self._ident()` no lleva tipo, alcance ni graduación, y
+            # sin ellos el reporte salía siempre como "Suelos" y sin
+            # graduación, aunque en pantalla se hubiera elegido control de
+            # calidad.
+            report_pdf(datos, res, ident, path)
         except Exception as e:
             messagebox.showerror("Guardar PDF", "Error al generar el PDF:\n%s" % e)
             return

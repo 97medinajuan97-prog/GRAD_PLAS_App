@@ -149,6 +149,11 @@ def calcular(data):
     # no lo tiene: se informa solo el grupo, sin paréntesis.
     res["ig"] = indice_grupo(Fn, LL2, PI2)
     res["aashto"] = ("%s (%d)" % (gpo, res["ig"])) if (gpo and res["ig"] is not None) else (gpo or None)
+    # La graduación viaja al resultado para que el reporte dibuje la zona de
+    # filtro de la curva sin volver a preguntar a la interfaz. Viene en el bloque
+    # `grano`, que es donde la app la deja junto al alcance.
+    res["graduacion"] = (grano.get("graduacion") or "").strip()
+
     res["aashto_desc"] = None
     if gpo:
         from motor.clasificacion import DESC_AASHTO
