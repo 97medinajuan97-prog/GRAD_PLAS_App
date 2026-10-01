@@ -73,7 +73,8 @@ _PLASTICIDAD = {"L": "baja", "H": "alta", "M": "media"}
 _LIMPIOS = {"GW", "GP", "SW", "SP"}
 # calificativos de cada fracción, en (singular, plural) y por género
 _ADJ = {
-    "arena": {True: ("arenoza", "arenosas"), False: ("arenoso", "arenosos")},
+    # "arenosa", no "arenoza": el plural ("arenosas") ya estaba bien.
+    "arena": {True: ("arenosa", "arenosas"), False: ("arenoso", "arenosos")},
     "grava": {True: ("gravosa", "gravosas"), False: ("gravoso", "gravosos")},
 }
 # clave (femenino, plural) -> "no plástico" concordado

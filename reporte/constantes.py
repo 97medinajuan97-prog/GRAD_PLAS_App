@@ -11,7 +11,7 @@ documentos generados. Edítelos aquí y se reflejarán en todos los reportes.
 #: Edítelos aquí y se reflejarán en todos los reportes.
 PIE = (
     "Carrera 28 # 2\u00aa 08 Sogamoso Boyac\u00e1   \u00b7   "
-    "Cel. 315 8468211 \u2013 310 871 6863 - Tel (038) 775 06 30   \u00b7   "
+    "Cel. 318 5613325 \u2013 310 871 6863 - Tel (608) 775 06 30   \u00b7   "
     "Email. cgutierrezcarrerog@gmail.com",
 )
 
