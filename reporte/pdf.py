@@ -318,6 +318,8 @@ _LABEL_IDENT = {
     "sondeo": "Perforación N°",
     "profundidad": "Profundidad (m)",
     "descripcion": "Color",
+    "tipo": "Tipo",
+    "alcance": "Alcance",
 }
 
 
@@ -346,6 +348,19 @@ def _id_campo(datos, ident, key):
                 if _normalizar(lb) == esc:
                     return val.strip()
     return ""
+
+
+def _tipo_muestra(datos, ident):
+    """(tipo, alcance) para el encabezado del reporte.
+
+    El tipo siempre tiene valor ("Suelos" por defecto). El alcance solo se
+    imprime en control de calidad: es la familia de ensayo y no aplica a una
+    muestra de suelos, así que una muestra de suelos sale sin esa fila en vez
+    de salir con un campo vacío.
+    """
+    tipo = (_id_campo(datos, ident, "tipo") or "Suelos").strip()
+    alcance = (_id_campo(datos, ident, "alcance") or "").strip()
+    return tipo, (alcance if (alcance and tipo.lower() != "suelos") else "")
 
 
 def _desc_material(datos, res, ident):
@@ -465,7 +480,11 @@ def _rohs_project_info(datos, res, ident):
         n = max(1, len(_partir(c, txto or "", fn, SIZE, maxw)))
         return max(R0, n * LH + 2.0)
 
-    return [roh(True, proy), roh(True, orden), R0, R0, R0, roh(True, desc)]
+    # Tipo/ALCANCE y descripción material son filas fijas: el tipo siempre tiene
+    # valor y el alcance solo se imprime en control de calidad, pero la fila no
+    # crece ni mengua, así el alto de la sección no depende de la muestra.
+    return [roh(True, proy), roh(True, orden), R0, R0, R0, R0,
+            roh(True, desc)]
 
 
 def _medir_project_info(datos, res, ident):
@@ -520,7 +539,13 @@ def _dibujar_project_info(c, box, fn, fnb, datos, res, ident):
     f_ejec = _id_campo(datos, ident, "fecha_ejecucion")
     prof = _profundidad(datos, ident)
     desc = _desc_material(datos, res, ident)
+    tipo, alcance = _tipo_muestra(datos, ident)
 
+    # La fila TIPO/ALCANCE va emparejada con SECTOR/MUESTRA, que son campos
+    # cortos. El alcance solo se imprime en control de calidad; en suelos la
+    # celda queda vacía, porque un alcance ahí no significaría nada.
+    celdas_alcance = ([("label", "ALCANCE", L2, L3), ("centro", alcance, L3, 1.0)]
+                      if alcance else [])
     filas = [
         # (es_larga, celdas)
         (True,  [("label", "PROYECTO", 0, L1), ("texto", proy, L1, 1.0)]),
@@ -531,6 +556,8 @@ def _dibujar_project_info(c, box, fn, fnb, datos, res, ident):
                  ("label", "FECHA DE EJECUCIÓN", L2, L3), ("centro", f_ejec, L3, 1.0)]),
         (False, [("label", "PERFORACIÓN", 0, L1), ("centro", perf, L1, L2),
                  ("label", "PROFUNDIDAD", L2, L3), ("centro", prof, L3, 1.0)]),
+        (False, [("label", "TIPO", 0, L1), ("centro", tipo, L1, L2)]
+                 + celdas_alcance),
         (True,  [("label", "DESCRIPCIÓN MATERIAL", 0, L1), ("desc", desc, L1, 1.0)]),
     ]
 

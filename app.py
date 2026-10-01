@@ -293,6 +293,19 @@ class App(tk.Tk):
     #: mismo para que midan igual, ya que el texto más corto no los iguala.
     ANCHO_BTN = 17
 
+    #: Tipo de muestra: para qué se toma. Es lo primero que pregunta el
+    #: laboratorio, porque decide el alcance de los ensayos que se van a hacer.
+    TIPO_SUELOS = "Suelos"
+    TIPO_CC = "Control de calidad"
+    TIPOS_MUESTRA = (TIPO_SUELOS, TIPO_CC)
+
+    #: Dentro de control de calidad, la familia de ensayo. Son los tres
+    #: frentes en que un material se somete a control tras puesto en obra.
+    ALCANCE_CC_1 = "Afirmados-Bases-Subbases"
+    ALCANCE_CC_2 = "Estructuras y drenajes"
+    ALCANCE_CC_3 = "Pavimentos asfálticos"
+    ALCANCES_CC = (ALCANCE_CC_1, ALCANCE_CC_2, ALCANCE_CC_3)
+
     def _build_muestra(self, parent):
         """Caja de la muestra: carpeta de trabajo, abrir y guardar.
 
@@ -346,8 +359,47 @@ class App(tk.Tk):
                             command=self._elegir_dir)
         btn_dir.pack(side="right", padx=(2, 3))
         ToolTip(btn_dir, "Elegir la carpeta de trabajo.")
-        ayuda_seccion(
+
+        # --- tipo de muestra y alcance ---
+        # El tipo dice para qué va la muestra; el alcance, más abajo, solo tiene
+        # sentido en control de calidad: son las tres familias de ensayo que se
+        # manejan como control de calidad. En suelos se esconde porque no aplica.
+        tk.Label(f, text="Tipo", bg=CARD, fg=MUT,
+                 font=(FAM_UI, 9), anchor="w").pack(fill="x", pady=(10, 2))
+        self.sel_tipo = SelectDropdown(f, list(self.TIPOS_MUESTRA),
+                                       inicial=self.TIPO_SUELOS, ancho=22)
+        self.sel_tipo.pack(fill="x")
+        ToolTip(self.sel_tipo, "Suelos: caracterización del terreno. "
+                               "Control de calidad: verificación de un "
+                               "material puesto en obra.")
+
+        self._caja_alcance = tk.Frame(f, bg=CARD)
+        lbl_alc = tk.Label(self._caja_alcance, text="Alcance", bg=CARD, fg=MUT,
+                           font=(FAM_UI, 9), anchor="w")
+        lbl_alc.pack(fill="x", pady=(10, 2))
+        self.sel_alcance = SelectDropdown(
+            self._caja_alcance, list(self.ALCANCES_CC),
+            inicial=self.ALCANCE_CC_1, ancho=22)
+        self.sel_alcance.pack(fill="x")
+        ToolTip(self.sel_alcance, "Familia de ensayo dentro de control de "
+                                  "calidad.")
+        # `trace` en vez de un comando: si la variable cambia por cualquier vía
+        # (cargar una muestra, restaurar un archivo) el selector se muestra o se
+        # esconde igual, y no queda desincronizado con la lista de alcances.
+        self.sel_tipo.var.trace_add(
+            "write", lambda *a: self._sincronizar_alcance())
+        self._sincronizar_alcance()
+
+        # Se guarda la referencia para poder insertar el alcance antes de la
+        # ayuda cuando haya que mostrarlo: `pack` solo coloca al final.
+        self._ayuda_muestra = ayuda_seccion(
             f,
+            "Tipo: qué va a muestrear. Suelos es la caracterización del "
+            "terreno; control de calidad, la verificación de un material "
+            "puesto en obra.\n"
+            "Alcance: solo en control de calidad, la familia de ensayo "
+            "(afirmados, estructuras y drenajes, o pavimentos asfálticos). "
+            "Se guarda con la muestra y aparece en el reporte.\n"
             "Carpeta de trabajo: donde se guardan las muestras.\n"
             "Abrir muestra: carga una muestra guardada en un archivo .json.\n"
             "Guardar muestra: guarda TODO el ingreso actual (identificación, "
@@ -356,6 +408,25 @@ class App(tk.Tk):
             "muestra: perforación, número de muestra y GRAD, por ejemplo "
             "PM1_M5_GRAD.json.\n"
             "El archivo es texto plano: se puede revisar, copiar o versionar.")
+
+    def _sincronizar_alcance(self):
+        """Muestra u oculta el selector de alcance según el tipo elegido.
+
+        El alcance solo existe en control de calidad. En suelos se esconde la
+        fila entera, no solo el desplegable, para que no quede la etiqueta
+        "Alcance" colgando sin nada debajo.
+        """
+        es_cc = (self.sel_tipo.get() == self.TIPO_CC)
+        # El estado de `pack` se lee con `winfo_manager()`, no con
+        # `winfo_ismapped()`: este último devuelve 0 hasta que la ventana pasa
+        # por un ciclo de dibujo completo, así que al cargar una muestra el
+        # selector ya estaba empacado pero parecía no estarlo, y el siguiente
+        # `pack` lo recolocaba al final de la caja, debajo del símbolo de ayuda.
+        empacada = (self._caja_alcance.winfo_manager() != "")
+        if es_cc and not empacada:
+            self._caja_alcance.pack(fill="x")
+        elif not es_cc and empacada:
+            self._caja_alcance.pack_forget()
 
     # ---------------- carpeta de trabajo ----------------
     #: archivo donde se recuerda la carpeta elegida entre sesiones. Va junto
@@ -423,10 +494,26 @@ class App(tk.Tk):
     def _nombre_muestra(self, ident):
         return self._nombre_base(ident) + ".json"
 
+    def _tipo_alcance(self):
+        """(tipo, alcance) elegidos, con el alcance vacío si no aplica.
+
+        El alcance solo tiene valor en control de calidad: en suelos se
+        devuelve vacío, que es lo que viaja al archivo y al reporte.
+        """
+        tipo = self.sel_tipo.get() or self.TIPO_SUELOS
+        alcance = (self.sel_alcance.get()
+                   if tipo == self.TIPO_CC else "")
+        return tipo, alcance
+
     def _guardar_muestra(self):
         """Guarda la muestra en la carpeta de trabajo, sin preguntar."""
         datos = self._datos()
         ident = self._ident_dict()
+        tipo, alcance = self._tipo_alcance()
+        ident["tipo"] = tipo
+        # Se guarda aunque esté vacío: así el archivo declara que es una
+        # muestra de suelos, en vez de no decir nada.
+        ident["alcance"] = alcance
         d = self._dir_trabajo()
         if not os.path.isdir(d):
             messagebox.showerror(
@@ -899,9 +986,14 @@ class App(tk.Tk):
                 "grano": self.grano.leer()}
 
     def _ident_dict(self):
-        """Identificación como diccionario (no como lista de rótulos)."""
+        """Identificación como diccionario (no como lista de rótulos).
+
+        Incluye el tipo de muestra y, en control de calidad, el alcance, para
+        que el reporte pueda imprimirlos sin volver a preguntar a la interfaz.
+        """
         d = {k: v.get().strip() for k, v in self.idvars.items()}
         d["descripcion"] = self.ident_desc.get("1.0", "end-1c").strip()
+        d["tipo"], d["alcance"] = self._tipo_alcance()
         return d
 
     # ---------------- muestra: archivo de la muestra ----------------
@@ -920,6 +1012,17 @@ class App(tk.Tk):
         self.ident_desc.delete("1.0", "end")
         self.ident_desc.insert("1.0", ident.get("descripcion") or "")
         self._ajustar_desc()
+        # El tipo va antes del alcance: al poner "Control de calidad" la traza
+        # muestra el selector de alcance, y solo entonces se puede dejar en la
+        # posición que traía el archivo.
+        tipo = ident.get("tipo") or self.TIPO_SUELOS
+        if tipo not in self.TIPOS_MUESTRA:
+            tipo = self.TIPO_SUELOS
+        self.sel_tipo.set(tipo)
+        alcance = ident.get("alcance") or ""
+        if alcance not in self.ALCANCES_CC:
+            alcance = ""
+        self.sel_alcance.set(alcance or self.ALCANCE_CC_1)
         self._refresh()
 
     def _abrir_muestra(self):
