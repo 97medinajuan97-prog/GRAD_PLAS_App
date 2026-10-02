@@ -13,7 +13,7 @@ import re
 import tkinter as tk
 from tkinter import ttk
 
-VERSION = "2.0.0"
+VERSION = "2.1.0"
 
 # --------------------------------------------------------------------------
 # Paleta de la identidad (color_theme.jpeg)

@@ -37,6 +37,17 @@ _MARGEN_S = _MARGEN_I = 36.0             # 0.5 pulgadas sup./inf.
 
 GAP = 5.0                                # separación vertical entre recuadros
 
+#: Colores de la identidad de la app (`ui_theme`), para los puntos de datos de
+#: las dos gráficas del reporte. No son los mismos que `CL_BRAND`, que es el azul
+#: de RAPITEST con el que se pintan las curvas: aquí se pidió el de la identidad,
+#: y con el ámbar de relleno los puntos se distinguen de un vistazo de la línea
+#: azul sobre la que van.
+#:
+#: Van a nivel de módulo y no dentro de cada gráfica porque las dos los usan y
+#: duplicados acabarían divergiendo.
+CL_AZUL_TEMA = "#223A59"        # ui_theme.AZUL
+CL_AMBAR_TEMA = "#F2AE30"       # ui_theme.AMBAR
+
 # ---- secciones: (nombre, descripción, x%, y%, ancho%, alto%) ----
 # x/y/ancho de la tabla original; el alto (%) se respeta, la posición
 # horizontal es siempre ancho completo y y se recalcula con `GAP`.
@@ -84,6 +95,24 @@ _SECT_H_GR = 14 * _GR_ROWH + _GR_BAND_GAP + _GR_BAND_H   # referencia: serie de 
 # garantizar que la banda de firmas (anclada al fondo) conserve su espacio.
 _SECT_H_CHART = 172.0
 
+#: Aire que se deja entre la última sección del cuerpo y el bloque de firmas.
+#: El bloque no se mueve nunca (es de altura fija y pegado al pie), así que este
+#: margen es lo que absorbe la diferencia de alto entre una muestra de suelos
+#: (13 tamices) y una de control de calidad (12 tamices).
+_AIR_FIRMAS = 12.0
+
+#: Alto mínimo (pt) de cada sección del cuerpo, usado como suelo cuando hay que
+#: recortarla para que no invada el bloque de firmas. Por debajo de estos valores
+#: el contenido deja de caber y se dibujaría cortado: el recorte para antes, y
+#: la sección se dibuja en lo que le queda, aunque se solape un poco.
+_MIN_H_SECCION = {
+    "header": 30.0,
+    "project-info": 60.0,
+    "wl-wp-block": 80.0,
+    "granulometria-block": 120.0,
+    "grain-size-chart": 100.0,
+}
+
 SECTIONS = [
     ("page",                "Hoja carta completa (área útil)",                    0,  0, 100, 100),
     ("header",              "Logo + título | código / versión / página",           3,  2,  94,   6.25),
@@ -91,7 +120,7 @@ SECTIONS = [
     ("wl-wp-block",         "Tabla de pesos/límites + gráfica de fluidez (reservada)", 3, 27,  94,  18),
     ("granulometria-block", "Tabla granulometría + resultados/clasificación",      3, 45,  94,  27),
     ("grain-size-chart",    "Curva granulométrica semi-log",                       3, 72,  94,	26),
-    ("firmas-block",        "Firmas de responsabilidad (encima del pie)",    3,  87,  94,   6),
+    ("firmas-block",        "Firmas de responsabilidad (encima del pie)",    3,  87,  94, 7.8),
     ("footer",              "Dirección / email",                                   3, 93,  94, 1.0),
 ]
 
@@ -216,6 +245,17 @@ def _pilas(ML, MB, CW, CH, gap=GAP, alturas=None):
     # visualmente simétricos. El sobrante, si lo hay, queda entre la última
     # sección del cuerpo y las firmas.
     tope = MB + CH
+    # Techo del bloque anclado: por encima de esta línea ya no puede subir el
+    # cuerpo. El bloque de firmas es de altura fija y pegado al fondo, así que
+    # este `tope_firmas` tampoco cambia de una muestra a otra: es lo que
+    # mantiene las firmas siempre en el mismo sitio, pegadas al pie.
+    #
+    # Antes esta cota no existía y el cuerpo se apilaba sin límite: con una
+    # muestra de suelos (13 tamices) la granulometría crece, el sobrante se
+    # vuelve negativo y la curva se colgaba hasta invadir el bloque de firmas.
+    # Con una BG-38 (12 tamices) cabía, y por eso el bloque parecía "moverse"
+    # según la muestra: lo que cambiaba era cuánto le sobraba a la curva.
+    top_anchor = yb - anchgap
     offset = 0.0
     # El hueco va ANTES de cada sección, y se decide con el par (anterior,
     # esta). La primera sección va pegada al tope, sin hueco.
@@ -230,6 +270,19 @@ def _pilas(ML, MB, CW, CH, gap=GAP, alturas=None):
             hueco_antes = (_GR_CHART_GAP
                            if (anterior == "granulometria-block"
                                and nombre == "grain-size-chart") else gap)
+        y = tope - offset - hueco_antes - h
+        # Si con el alto pedido esta sección baja de la cota de las firmas, se
+        # le recorta lo justo para no pisarlas y dejar el margen mínimo. La base
+        # se apoya en la cota: el alto que sobra es `(posicion con h=0) - cota`,
+        # y a eso se le descuenta el margen para que la curva no llegue a tocar
+        # las firmas.
+        min_h = _MIN_H_SECCION.get(nombre, 60.0)
+        if y < top_anchor + _AIR_FIRMAS:
+            h = (tope - offset - hueco_antes) - top_anchor - _AIR_FIRMAS
+            if h < min_h:
+                # Ni recortando cabe: se deja el mínimo. Es preferible un
+                # gráfico corto a uno encima de las firmas.
+                h = min_h
         y = tope - offset - hueco_antes - h
         pilas.append((nombre, desc, ML, y, CW, h))
         offset += h + hueco_antes
@@ -653,10 +706,21 @@ def _repartir_chart(hs, CH):
     anclas = sum(s[5] / 100.0 * CH for s in secs if s[3] >= 80.0)
     cuerpo = [i for i, s in enumerate(secs) if s[3] < 80.0]
     total = sum(hs[i] for i in cuerpo)
-    n_gaps = len(cuerpo) - 1
+    # Los huecos NO son todos `GAP`: antes de la curva va `_GR_CHART_GAP`, que
+    # es mayor. Contarlos todos como `GAP` hacía que el sobrante saliera
+    # sobrado en `_GR_CHART_GAP - GAP` pt, y esa diferencia se le entregaba a
+    # la curva como alto, con lo que se colgaba sobre el bloque de firmas. Se
+    # cuentan los huecos como los aplica `_pilas`, uno por par de secciones.
+    huecos = 0.0
+    for k in range(1, len(cuerpo)):
+        if secs[cuerpo[k - 1]][0] == "granulometria-block" \
+                and secs[cuerpo[k]][0] == "grain-size-chart":
+            huecos += _GR_CHART_GAP
+        else:
+            huecos += GAP
     # hueco total disponible entre el tope del cuerpo y el bloque de firmas
     disponible = CH - anclas - 1.0
-    sobrante = disponible - total - n_gaps * GAP
+    sobrante = disponible - total - huecos
     if sobrante <= 0:
         return hs
     extra = _GR_CHART_GAP - GAP          # lo que hay que añadir al hueco
@@ -1153,13 +1217,15 @@ def _dib_wl_wp(c, box, fn, fnb, datos, res):
                 c.setLineWidth(0.8)
                 c.line(*seg)
 
-    # 3) puntos de datos (los 3 ensayos): azul de marca con borde negro
+    # 3) puntos de datos (los 3 ensayos): relleno ambar con borde azul, los
+    #    mismos colores que los puntos de la curva granulométrica, para que
+    #    las dos gráficas del reporte se lean como la misma familia.
     if pts:
-        c.setFillColor(BRAND)
-        c.setStrokeColor(C_DK)
+        c.setFillColor(rlcolors.HexColor(CL_AMBAR_TEMA))
+        c.setStrokeColor(rlcolors.HexColor(CL_AZUL_TEMA))
         c.setLineWidth(0.6)
         for n, hv in pts:
-            c.circle(px(n), py(hv, y_min, y_max), 1.9, stroke=1, fill=1)
+            c.circle(px(n), py(hv, y_min, y_max), 1.4, stroke=1, fill=1)
 
     # 4) proyección en N = 25 (lectura del límite líquido): vertical desde el
     #    eje X y horizontal hasta el eje Y, punteadas en rojo
@@ -1777,19 +1843,20 @@ def _dib_grain_size_chart(c, box, fn, fnb, res):
         for _p1, c1, c2, p2 in tramos:
             path.curveTo(c1[0], c1[1], c2[0], c2[1], p2[0], p2[1])
         c.setStrokeColor(CL_BRAND)
-        c.setLineWidth(1.0)
+        c.setLineWidth(1.4)
         c.setLineJoin(1)
         c.setLineCap(1)
         c.drawPath(path, stroke=1, fill=0)
         c.setLineJoin(0); c.setLineCap(0)
-    # 6) puntos de datos: círculo azul macizo, sin borde negro y más pequeño.
-    #    El borde negro sobre un trazo ya fino lo engordaba y los marcadores
-    #    parecían más pesados que la propia curva.
-    c.setFillColor(CL_BRAND)
-    c.setStrokeColor(CL_BRAND)
-    c.setLineWidth(0.3)
+    # 6) puntos de datos: relleno del ambar de la identidad con el borde en el
+    #    azul de la identidad, igual que los puntos de la curva de fluidez. Con
+    #    las dos curvas del reporte usando los mismos colores, se leen como
+    #    parte de la misma familia y no como dos gráficas distintas.
+    c.setFillColor(CL_AMBAR_TEMA)
+    c.setStrokeColor(CL_AZUL_TEMA)
+    c.setLineWidth(0.6)
     for (mx, my) in pts:
-        c.circle(mx, my, 0.9, stroke=0, fill=1)
+        c.circle(mx, my, 1.0, stroke=1, fill=1)
     # 6) marco negro del area de trazado
     c.setStrokeColor(CL_NEGRO)
     c.setLineWidth(0.5)
@@ -1991,11 +2058,55 @@ def _dibujar_firmas(c, box, fn, fnb, firmar=True):
     c.line(midx, y, midx, y + h)
 
     half = w / 2.0
-    #: alto reservado para la firma, por encima de la línea. La línea se mide
-    #: desde ARRIBA de la caja: la caja está anclada al borde inferior de la
-    #: hoja, y lo que se quiere es que la firma quede entre la línea y el
-    #: borde superior de su bloque, sin pasarse.
-    alto_firma = 22.0
+    # La caja está anclada al borde inferior de la hoja, así que los renglones
+    # se apoyan en su SUELO y el aire que sobra queda arriba, en la zona de la
+    # firma, que es donde no estorba.
+    #
+    # Los tres huecos pedidos se miden de arriba hacia abajo, con los separadores
+    # declarados aquí:
+    #
+    #     linea de firma
+    #        ^ 1.5 pt
+    #     cargo  ("Ing. Control de Calidad")
+    #        ^ 1.5 pt
+    #     nombre ("Carlos Hernán Gutiérrez Carrero")
+    #        ^ 5 pt
+    #     linea del pie de página
+    #
+    # `_ALTO_CARGO` y `_ALTO_NOMBRE` son el alto VISUAL de cada renglón, medido
+    # sobre los GLIFOS del PDF de salida y no sobre el cuerpo de la fuente
+    # (8.0 y 7.6): el renglón ocupa más de lo que dice el cuerpo por los
+    # ascendentes y descendentes. Con el cuerpo en vez del alto real, los dos
+    # renglones se solapan.
+    #
+    # Los separadores están compensados con lo que miden de más los glifos, y
+    # por eso no coinciden con los 1,5 pt nominales. Los dos separadores de texto
+    # llevan la compensación de los ascendentes y descendentes: `_GAP_CARGO_NOMBRE`
+    # suma 0,19 por lo que el glifo del cargo sobresale por debajo de su base, y
+    # `_GAP_LINEA_CARGO` sale NEGATIVO (−0,96) porque la línea de firma tiene que
+    # subir por encima del cargo: al medirse desde la base, el hueco de 1,5 pt se
+    # alcanza antes. Están calibrados midiendo el hueco real sobre el PDF: dan
+    # 1,50 / 1,50 / 5,00 exactos.
+    _ALTO_CARGO = 11.02                   # alto visible del renglón del cargo
+    _ALTO_NOMBRE = 10.44                  # alto visible del renglón del nombre
+    _GAP_LINEA_CARGO = -0.96              # línea de firma -> cargo (1.5 medidos)
+    _GAP_CARGO_NOMBRE = 1.69              # cargo -> nombre (1.5 medidos)
+    #: El pie se dibuja a un alto fijo sobre el margen inferior (`_dibujar_pie`
+    #: lo pone en 36.0), así que la base de esta caja queda `_APOYO_PIE` por
+    #: encima de esa línea. De ahí sale el apoyo del nombre.
+    _APOYO_PIE = 5.93
+    _GAP_NOMBRE_PIE = 5.0                 # nombre -> línea del pie
+    try:
+        from reporte.constantes import ALTO_FIRMA_BASE
+    except Exception:
+        ALTO_FIRMA_BASE = 19.2
+    # El nombre es el renglón de abajo: se apoya en el suelo con el hueco pedido
+    # respecto del pie.
+    base_nombre = y - _APOYO_PIE + _GAP_NOMBRE_PIE
+    # El cargo va encima, con su hueco. `_ALTO_NOMBRE` mide el renglón completo,
+    # así que la base del cargo es la base del nombre más ese alto más el hueco.
+    base_cargo = base_nombre + _ALTO_NOMBRE + _GAP_CARGO_NOMBRE
+    y_linea = base_cargo + _ALTO_CARGO + _GAP_LINEA_CARGO
     for it in FIRMAS:
         lado = (it.get("lado") or "izq").lower()
         cx = x if lado.startswith("izq") else midx
@@ -2005,9 +2116,8 @@ def _dibujar_firmas(c, box, fn, fnb, firmar=True):
         # La línea se dibuja DESPUÉS de la firma: si fuera antes, una firma con
         # fondo transparente dejaría la línea asomando entre los trazos, y el
         # papel de un escaneo casi nunca es del todo transparente.
-        y_linea = y + h - alto_firma
-        base_cargo = y_linea - 8.0
-        base_nombre = base_cargo - 9.5
+        # `y_linea`, `base_cargo` y `base_nombre` ya se calcularon arriba, con
+        # el bloque apoyado en su suelo.
 
         ruta = _firma_preparada(it.get("imagen")) if firmar else None
         if ruta:
@@ -2020,8 +2130,15 @@ def _dibujar_firmas(c, box, fn, fnb, firmar=True):
             except Exception:
                 iw = ih = 0
             if iw > 0 and ih > 0:
-                # Alto disponible: el bloque por encima de la línea, con aire.
-                disp_h = h - alto_firma - 2.0
+                # Alto pedido para esta firma: el que trae la configuracion, o
+                # el de siempre si no lo trae. El tope del bloque manda igual:
+                # una firma no puede salirse de su caja por grande que se
+                # pida, y en ese caso manda el encaje de abajo.
+                try:
+                    pedido = float(it.get("alto") or ALTO_FIRMA_BASE)
+                except Exception:
+                    pedido = ALTO_FIRMA_BASE
+                disp_h = min(pedido, h - 2.0)
                 esc = min(lw / float(iw), disp_h / float(ih))
                 # reportlab toma la `y` de `drawImage` como la esquina
                 # INFERIOR, y la imagen crece hacia arriba. Pasarle la línea

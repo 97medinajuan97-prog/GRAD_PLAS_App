@@ -280,6 +280,9 @@ class Granulometria(Seccion):
         #: humedad despues ya no cambia esta casilla, porque el total de la
         #: granulometria es suyo. Borrarlo devuelve el control a la humedad.
         self._w1_propio = False
+        #: True mientras el cursor este en la casilla W1, para que
+        #: `mostrar` no la reescriba mientras se escribe.
+        self._w1_enfocado = False
         #: Serie de tamices vigente. Arranca con la de suelos y la cambia la
         #: app según el tipo de muestra y su alcance (`set_serie`).
         self._serie = list(SIEVES_SUELOS)
@@ -322,7 +325,8 @@ class Granulometria(Seccion):
         frm, num = self.caja(fila, self.v_w1, editable=True)
         frm.pack(side="left", padx=(10, 0))
         num.bind("<KeyRelease>", self._al_tocar_w1, add="+")
-        num.bind("<FocusOut>", self._al_tocar_w1, add="+")
+        num.bind("<FocusOut>", self._al_salir_w1, add="+")
+        num.bind("<FocusIn>", self._entrar_w1, add="+")
         #: Marca de "este valor lo escribio el usuario". Sin ella, un W1 que no
         #: cuadra con los pesos parece un error de la aplicacion, cuando es un
         #: valor introducido a proposito.
@@ -551,11 +555,11 @@ class Granulometria(Seccion):
 
     def mostrar(self, res):
         gt = res.get("g_total")
-        # La casilla refleja siempre el total que se esta usando, para que el
-        # numero de la tabla y el W1 de arriba no se contradigan. Se escribe en
-        # la variable y no en el control, y la variable NO esta conectada al
-        # refresco: si lo estuviera, esto mismo se volveria a refrescar.
-        self.v_w1.set("—" if gt is None else "%.2f" % gt)
+        # Mientras el cursor esté en la casilla, NO se reescribe: se está
+        # escribiendo y cualquier valor puesto por el programa se comería lo
+        # que el usuario teclea. Al salir de la casilla se vuelve a rellenar.
+        if not self._w1_enfocado:
+            self.v_w1.set("—" if gt is None else "%.2f" % gt)
         self._marcar_w1()
         f = res.get("fondo")
         w2 = (gt - f) if (gt is not None and f is not None) else None
@@ -602,8 +606,9 @@ class Granulometria(Seccion):
         pesos = list(g.get("pesos") or [])
         serie_origen = list(g.get("serie") or [n for n, _ in self._serie])
         self._set_pesos_por_nombre(pesos, serie_origen)
-        # Un archivo viejo no trae W1: se deja el control a la humedad, que es
-        # lo que hacia la aplicacion antes de que la casilla fuera editable.
+        # Un archivo viejo no trae el campo W1: se devuelve el control a la
+        # humedad, que es como se veían las muestras de antes de que la casilla
+        # fuera editable.
         w1 = g.get("w1")
         if w1 is not None:
             self._w1_propio = True
@@ -611,23 +616,40 @@ class Granulometria(Seccion):
         else:
             self._w1_propio = False
             self.v_w1.set("")
+        self._w1_enfocado = False
         self._marcar_w1()
 
     def w1_propio(self):
         """¿El usuario escribió un W1 propio en vez de usar el de la humedad?"""
         return self._w1_propio
 
-    def _al_tocar_w1(self, *_):
-        """El usuario escribio en la casilla W1.
+    def _entrar_w1(self, *_):
+        """El cursor entró en la casilla W1: a partir de aquí no se reescribe."""
+        self._w1_enfocado = True
 
-        Se escucha en el CONTROL y no en la variable, y a proposito. W1 es una
-        salida que se rellena sola con el total, asi que si la variable
+    def _al_salir_w1(self, *_):
+        """El cursor salió: ya no se está escribiendo, se puede refrescar."""
+        self._w1_enfocado = False
+        self._al_tocar_w1()
+
+    def _al_tocar_w1(self, *_):
+        """El usuario escribió en la casilla W1.
+
+        Se escucha en el CONTROL y no en la variable, y a propósito. W1 es una
+        salida que se rellena sola con el total, así que si la variable
         estuviera conectada al refresco, cada vez que `mostrar` la rellenara
-        se volveria a refrescar, y de ahi otra vez, sin fin. Ademas no se
-        podria distinguir un relleno de una edicion. En el control solo llegan
+        se volvería a refrescar, y de ahí otra vez, sin fin. Además no se
+        podría distinguir un relleno de una edición. En el control solo llegan
         pulsaciones de teclado: lo escribe la persona o no lo escribe.
+
+        Vaciar la casilla devuelve el control a la humedad en el acto, sin
+        esperar a que el cursor salga: es lo que promete la ayuda, y dejar la
+        casilla en blanco hasta el siguiente clic se lee como un fallo.
         """
-        self._w1_propio = bool(self.v_w1.get().strip())
+        vacio = not self.v_w1.get().strip()
+        self._w1_propio = not vacio
+        if vacio:
+            self._w1_enfocado = False
         self._marcar_w1()
         self.pedir_refresco()
 

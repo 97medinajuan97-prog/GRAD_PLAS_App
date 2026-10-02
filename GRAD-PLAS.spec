@@ -19,9 +19,20 @@ Que quede una carpeta `dist/GRAD-PLAS.zip` para repartir.
 """
 
 # El logo viaja DENTRO del ejecutable: el reporte lo dibuja en el encabezado y
-# si no lo encuentra sale sin Ã©l. La ruta la resuelve `rutas.recurso()`, que
+# si no lo encuentra sale sin él. La ruta la resuelve `rutas.recurso()`, que
 # empaquetado apunta a `sys._MEIPASS`.
-datas = [("RAPITEST LOGO.png", ".")]
+#
+# Las firmas van dentro por lo mismo, y esto es una decision distinta de la de
+# Git: NO se versionan en el repositorio (son la rubrica de dos personas y el
+# repo es publico), pero sí se empaquetan, para que el portable que se reparte
+# salga con el bloque de firmas completo. Sin esta linea el ejecutable arranca
+# bien pero el reporte sale sin las imagenes: no falla, que es peor, porque
+# `rutas.recurso()` devuelve una ruta que no existe y `_firma_preparada` la
+# descarta sin avisar.
+datas = [
+    ("RAPITEST LOGO.png", "."),
+    ("firmas", "firmas"),
+]
 
 # `fitz` es el nombre antiguo de PyMuPDF. La app lo importa con ese nombre,
 # dentro de una funciÃ³n, asÃ­ que el anÃ¡lisis estÃ¡tico puede no engancharlo y

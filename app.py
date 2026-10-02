@@ -156,6 +156,9 @@ class App(tk.Tk):
         ToolTip(chk, "Incluir las firmas escaneadas en el reporte.\n\n"
                      "Sin marcar, el bloque sale con los nombres y el espacio "
                      "en blanco para firmar a mano.")
+        # Marcar o desmarcar cambia lo que se imprime, así que el reporte se
+        # rehace igual que con cualquier otro dato de la muestra.
+        self.firmar.trace_add("write", lambda *_: self._refresh())
         self._build_zoom(bar)
         # espacio elástico entre el rótulo y el grupo de la derecha, para que
         # el grupo quede siempre pegado al borde sin apretar el control

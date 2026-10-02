@@ -32,14 +32,24 @@ PIE = (
 #: La casilla "Firmar" de la aplicación decide si se dibujan o no. Sin ella
 #: quedan los nombres y el espacio en blanco, que es lo que se necesita para
 #: imprimir una copia que se va a firmar a mano.
+#: `alto` es el alto maximo de la firma en puntos, medido con la base apoyada en
+#: la linea. Sin la clave se usa `ALTO_FIRMA_BASE`, que es el tamaño con el que
+#: se vinha viendo la firma del laboratorista: asi la firma que no se toca no
+#: cambia de aspecto porque la otra haya crecido.
 FIRMAS = (
+    # La del ingeniero se veia muy reducida en el reporte, asi que va un 50 %
+    # mas alta. Crece desde abajo, apoyada en la linea, no desde el centro.
     {"lado": "izq", "imagen": "firmas/firma_ing.png",
      "nombre": "Carlos Hernán Gutiérrez Carrero",
-     "cargo": "Ing. Control de Calidad"},
+     "cargo": "Ing. Control de Calidad",
+     "alto": 28.8},
     {"lado": "der", "imagen": "firmas/firma_laboratorista.png",
      "nombre": "Jaider Gallego",
      "cargo": "Laboratorista"},
 )
+
+#: Alto por defecto de una firma, en puntos. Es el que ya se venia usando.
+ALTO_FIRMA_BASE = 19.2
 
 
 # ------------------------------------------------------------- exploracion ---
