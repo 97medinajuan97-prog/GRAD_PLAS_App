@@ -21,6 +21,7 @@ from collections import namedtuple
 
 from reporte.constantes import (codigo_exploracion, codigo_muestra,
                                 rotulo_exploracion)
+from rutas import nombre_copia, recurso
 
 # No se importa `secciones.granulometria` a propósito: ese módulo arrastra
 # tkinter y el reporte se genera también sin interfaz (servidor, pruebas). El
@@ -144,13 +145,11 @@ def _webfonts():
 def _temp_prefix():
     """Prefijo de los archivos temporales, propio de cada copia instalada.
 
-    El nombre incluye la carpeta del proyecto para que dos versiones de la
-    app abiertas a la vez no se pisen el mismo archivo temporal: sin esto el
-    preview de una versión se vería en la otra.
+    El nombre incluye la copia para que dos versiones de la app abiertas a la
+    vez no se pisen el mismo archivo temporal: sin esto el preview de una
+    versión se vería en la otra.
     """
-    carpeta = os.path.basename(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    return "gradplas_%s_" % carpeta
+    return "gradplas_%s_" % nombre_copia()
 
 
 def san(s):
@@ -252,8 +251,7 @@ def _dibujar_header(c, box, fn, fnb):
     from reportlab.lib.utils import ImageReader
     C_DK = rlcolors.HexColor("#000000")
 
-    LOGO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                        "RAPITEST LOGO.png")
+    LOGO = recurso("RAPITEST LOGO.png")
     SIZE = 8.0                                # fuente general del header
     SIZE_NIT = 6.5                            # NIT más pequeño que la empresa
 

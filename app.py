@@ -22,6 +22,7 @@ from reporte.constantes import (NOMBRES_EXPLORACION, codigo_exploracion,
                                 codigo_muestra, datos_exploracion,
                                 prefijo_exploracion)
 from datos_ejemplo import datos_ejemplo, SIMBOLOS
+from rutas import carpeta_datos
 
 #: Título de la ventana. Antes se escribía literal dos veces (título del `Tk`
 #: y rótulo de la franja superior) y cualquier corrección había que replicarla
@@ -562,12 +563,12 @@ class App(tk.Tk):
         elif not visible and empacada:
             caja.pack_forget()
 
-    # ---------------- carpeta de trabajo ----------------
-    #: archivo donde se recuerda la carpeta elegida entre sesiones. Va junto
-    #: a la aplicación, con ruta absoluta: si fuera relativo dependería del
-    #: directorio desde el que se arrancó y acabaría en otro sitio.
-    _CONF = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         "grad_plas_config.json")
+# ---------------- carpeta de trabajo ----------------
+#: Archivo donde se recuerda la carpeta elegida entre sesiones. Va en la
+    #: carpeta donde vive la aplicación: empaquetada, junto al `.exe`, para que
+    #: la configuración viaje con el programa y no se pierda al cerrar. Sin
+    #: empaquetar, en la carpeta del proyecto.
+    _CONF = os.path.join(carpeta_datos(), "grad_plas_config.json")
 
     def _leer_dir(self):
         """Carpeta de trabajo recordada; si no hay, el Escritorio."""

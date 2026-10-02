@@ -8,3 +8,14 @@ env/
 
 # Configuración local de esta instalación (carpeta de trabajo de las muestras)
 grad_plas_config.json
+
+# Empaquetado del ejecutable. `dist/` y `build/` los genera PyInstaller y son
+# grandes y reproducibles: no tiene sentido versionarlos. El `.spec` sí se
+# versiona, porque es lo que hace la compilación repetible.
+build/
+dist/
+*.manifest
+
+# El icono del ejecutable se compila a .ico desde icon.png con
+# tools_generar_icono.py. Se versiona el origen; el .ico es un derivado.
+icon.ico
