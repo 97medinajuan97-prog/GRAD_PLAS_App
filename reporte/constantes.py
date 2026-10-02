@@ -16,20 +16,29 @@ PIE = (
 )
 
 #: Firmas de responsabilidad (bloque justo encima del pie de página).
-#: Dos columnas separadas por una línea vertical delgada:
-#:   * izquierda: firma escaneada (imagen PNG con la firma escaneada) o
-#:                nombre en letra cursiva;
-#:   * derecha: firma en letra cursiva grande (simula la rúbrica manuscrita).
-#: Cada entrada: (lado, imagen, nombre, cargo, usar_cursiva).
-#:   - lado: "izq" (firma escaneada) o "der" (firma grande en cursiva)
-#:   - imagen: ruta PNG/JPG con la firma escaneada y fondo transparente;
-#:             vacío "" para usar la fuente cursiva simulada en su lugar
-#:   - usar_cursiva: True → el nombre se dibuja en letra cursiva grande
-#:                   simulando la rúbrica manuscrita
+#: Dos columnas separadas por una línea vertical delgada.
+#:
+#: Cada entrada dice, en este orden:
+#:   - lado:      "izq" o "der". Reparte las dos mitades del bloque.
+#:   - imagen:    firma preparada (PNG con el papel ya transparente y recortada
+#:                al trazo). Vacío "" si esa firma no tiene imagen.
+#:   - nombre:    de quién es, se imprime debajo de la línea.
+#:   - cargo:     el puesto, se imprime justo bajo la línea.
+#:
+#: Las imágenes se preparando con `tools_preparar_firmas.py`, que convierte los
+#: escaneos tal cual llegan (tinta sobre blanco, sin transparencia) en algo que
+#: se pueda imprimir: sin el rectángulo blanco de fondo y recortado al trazo.
+#:
+#: La casilla "Firmar" de la aplicación decide si se dibujan o no. Sin ella
+#: quedan los nombres y el espacio en blanco, que es lo que se necesita para
+#: imprimir una copia que se va a firmar a mano.
 FIRMAS = (
-    ("izq", "", "Carlos Hern\u00e1n Guti\u00e9rrez Carrero",
-     "Ing. Control de Calidad", False),
-    ("der", "", "Idauro Mu\u00f1oz", "Laboratorista", True),
+    {"lado": "izq", "imagen": "firmas/firma_ing.png",
+     "nombre": "Carlos Hernán Gutiérrez Carrero",
+     "cargo": "Ing. Control de Calidad"},
+    {"lado": "der", "imagen": "firmas/firma_laboratorista.png",
+     "nombre": "Jaider Gallego",
+     "cargo": "Laboratorista"},
 )
 
 

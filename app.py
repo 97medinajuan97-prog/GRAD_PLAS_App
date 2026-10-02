@@ -11,8 +11,7 @@ from tkinter import ttk, filedialog, messagebox
 from ui_theme import (aplicar_estilo, ScrollableFrame, ACC, ACC_D,
                       BG,                       BORDE_HOJA, CARD, CREMA, MUT, SUP, TXT, FAM_UI,
                       VERSION, validar_tecla, ayuda_seccion, SelectDropdown,
-                      habilitar_deshacer, ToolTip, FONDO_VISOR, BORDE,
-                      ZoomSlider)
+                      habilitar_deshacer, ToolTip, FONDO_VISOR, BORDE)
 
 from secciones.humedad import Humedad
 from secciones.limites import Limites
@@ -137,10 +136,27 @@ class App(tk.Tk):
         bar.pack(fill="both", expand=True, padx=(8, 8), pady=2)
         ttk.Label(bar, text="Reporte en vivo", style="Visor.TLabel",
                   font=(FAM_UI, 11, "bold")).pack(side="left", padx=(0, 6))
+
+        # Firmar: si está marcado, el reporte sale con las firmas escaneadas.
+        # Desmarcado (que es como abre) el bloque sale con los nombres y el
+        # espacio en blanco, que es lo que se necesita para una copia que se
+        # firma a mano.
+        self.firmar = tk.BooleanVar(value=False)
+        # El botón va primero: la barra se arma con `side="right"`, así que lo
+        # que se empaqueta primero queda más a la derecha. Empaquetando el
+        # check antes, "Firmar" salía a la derecha de "Guardar PDF", al revés
+        # de como se pidió.
         ttk.Button(bar, text="Guardar PDF", style="Accent.TButton",
                    command=self._pdf).pack(side="right", padx=2)
+        chk = tk.Checkbutton(bar, text="Firmar", variable=self.firmar,
+                             bg=FONDO_VISOR, fg=ACC, activebackground=FONDO_VISOR,
+                             selectcolor=FONDO_VISOR, font=(FAM_UI, 9),
+                             bd=0, highlightthickness=0, cursor="hand2")
+        chk.pack(side="right", padx=(4, 6))
+        ToolTip(chk, "Incluir las firmas escaneadas en el reporte.\n\n"
+                     "Sin marcar, el bloque sale con los nombres y el espacio "
+                     "en blanco para firmar a mano.")
         self._build_zoom(bar)
-        self._zoom_100()
         # espacio elástico entre el rótulo y el grupo de la derecha, para que
         # el grupo quede siempre pegado al borde sin apretar el control
         tk.Frame(bar, bg=FONDO_VISOR).pack(side="left", fill="x", expand=True)
@@ -169,22 +185,25 @@ class App(tk.Tk):
     PAD_HOJA = 12
 
     def _build_zoom(self, parent):
-        """Control de ampliación, al estilo de un visor de PDF sencillo.
+        """Ampliación del reporte: solo los dos botones y el porcentaje.
 
-        El 0 del control es el 100 %: la hoja se dibuja a su tamaño real,
-        converting los puntos del PDF a píxeles de pantalla según los DPI del
-        equipo. A la derecha va el porcentaje, que también se puede escribir.
+        El 0 es el 100 %: la hoja se dibuja a su tamaño real, convirtiendo los
+        puntos del PDF a píxeles de pantalla según los DPI del equipo. El
+        porcentaje es solo de lectura, se escribe al mover los botones.
+
+        Se quitaron el deslizador y el botón «Encajar» porque con los botones ya
+        se llega a cualquier tamaño, y el deslizador encima de la barra se comía
+        el espacio. El porcentaje se queda porque sin él no se sabe a qué
+        ampliación se está mirando la hoja.
         """
-        self._zoom_pct = tk.StringVar(value="100 %")
-        ttk.Label(parent, text="Zoom", style="Visor.TLabel",
-                  font=(FAM_UI, 9)).pack(side="right", padx=(8, 4))
-        ent = ttk.Entry(parent, textvariable=self._zoom_pct, width=7,
-                        style="Res.TEntry", justify="center",
-                        font=(FAM_UI, 9))
-        ent.pack(side="right", padx=(0, 8))
-        ent.bind("<Return>", self._zoom_escrito)
-        ent.bind("<FocusOut>", self._zoom_escrito)
-        self._zoom_ent = ent
+        self._zoom_val = 0.0
+        lbl = tk.Label(parent, text="Zoom", bg=FONDO_VISOR, fg=MUT,
+                       font=(FAM_UI, 9))
+        lbl.pack(side="right", padx=(8, 4))
+        self._zoom_pct_lbl = tk.Label(parent, text="100 %", bg=FONDO_VISOR,
+                                      fg=ACC, font=(FAM_UI, 9), width=6,
+                                      anchor="center")
+        self._zoom_pct_lbl.pack(side="right", padx=(0, 8))
 
         # Los botones usan el fondo de la barra para no abrir huecos claros.
         mas = tk.Button(parent, text="+", font=(FAM_UI, 11, "bold"),
@@ -194,28 +213,12 @@ class App(tk.Tk):
         mas.pack(side="right", padx=(0, 2))
         ToolTip(mas, "Aumentar la ampliación.")
 
-        # Control propio y no ttk: clam pinta el tirador como una línea de 1 px del
-        # color del tema y aquí no se deja colorear.
-        self._zoom = ZoomSlider(parent, from_=self.ZOOM_MIN,
-                                to=self.ZOOM_MAX, length=150,
-                                bg=FONDO_VISOR, command=self._zoom_ir)
-        # sin `expand`: si el deslizador creciera se comería el espacio y
-        # sacaría de la barra el porcentaje, la etiqueta y el botón de PDF
-        self._zoom.pack(side="right", padx=4)
-
         menos = tk.Button(parent, text="−", font=(FAM_UI, 11, "bold"),
                           bg=FONDO_VISOR, fg=ACC, relief="flat", bd=0,
                           width=2, activebackground=CREMA, cursor="hand2",
                           command=lambda: self._zoom_paso(-10))
         menos.pack(side="right")
         ToolTip(menos, "Reducir la ampliación.")
-
-        encajar = tk.Button(parent, text="Encajar", font=(FAM_UI, 9),
-                            bg=FONDO_VISOR, fg=ACC, relief="flat", bd=0,
-                            padx=6, activebackground=CREMA, cursor="hand2",
-                            command=self._encajar_hoja)
-        encajar.pack(side="right", padx=(6, 2))
-        ToolTip(encajar, "Ajustar para que la hoja completa entre en el panel.")
 
     def _factor_zoom(self):
         """Factor de escala para el 100 % real de la hoja.
@@ -231,73 +234,22 @@ class App(tk.Tk):
         return (ppp / 72.0) * (1.0 + self._zoom_valor() / 100.0)
 
     def _zoom_valor(self):
-        try:
-            return float(self._zoom.get())
-        except (tk.TclError, ValueError):
-            return 0.0
+        """Ampliación actual, con el 0 en el 100 %."""
+        return self._zoom_val
 
     def _zoom_ir(self, valor):
-        """Lleva el control a una posición absoluta (contexto del 0 = 100 %)."""
-        if isinstance(valor, str):
-            try:
-                valor = float(valor)
-            except ValueError:
-                return
-            desde_widget = True
-        else:
-            desde_widget = False
-        valor = max(self.ZOOM_MIN, min(self.ZOOM_MAX, valor))
-        if not desde_widget:
-            try:
-                # `set` dispara el comando, que vuelve a entrar por la vía del
-                # widget: por eso aquí ya no se reescribe el control
-                self._zoom.set(valor)
-            except tk.TclError:
-                pass
-        self._zoom_pct.set("%d %%" % round(100.0 + valor))
+        """Fija la ampliación a un valor absoluto (contexto del 0 = 100 %)."""
+        try:
+            valor = float(valor)
+        except (TypeError, ValueError):
+            return
+        self._zoom_val = max(self.ZOOM_MIN, min(self.ZOOM_MAX, valor))
+        self._zoom_pct_lbl.config(text="%d %%" % round(100.0 + self._zoom_val))
         self._schedule_preview(60)
 
     def _zoom_paso(self, salto):
-        """Mueve el control un tanto respecto a donde está (botones − y +)."""
+        """Mueve la ampliación un tanto respecto a donde está (botones − y +)."""
         self._zoom_ir(self._zoom_valor() + salto)
-
-    def _zoom_escrito(self, _ev=None):
-        """Acepta un porcentaje escrito a mano: 100, 75, 150 %."""
-        txt = self._zoom_pct.get().replace("%", "").strip().replace(",", ".")
-        try:
-            pct = float(txt)
-        except ValueError:
-            self._zoom_pct.set("%d %%" % round(100.0 + self._zoom_valor()))
-            return
-        # un porcentaje escrito es absoluto: 150 % es el 150 %, no "150 más"
-        self._zoom_ir(pct - 100.0)
-
-    def _encajar_hoja(self):
-        """Coloca el zoom en el valor que hace caber el alto de la hoja.
-
-        Se dejó de usar al abrir, porque el visor arranca en el 100 % real,
-        pero sigue en el botón «Encajar» para ver la hoja completa de una vez.
-        """
-        try:
-            alto = self.right_sc.canvas_height() - 2 * self.PAD_HOJA
-            ppp = float(self.winfo_fpixels("1i"))
-        except (tk.TclError, ValueError):
-            return
-        # alto de la carta en puntos (792) y en pulgadas (11)
-        if alto > 40 and ppp > 20:
-            pct = 100.0 * (alto / (11.0 * ppp))
-            self._zoom_ir(max(self.ZOOM_MIN, min(self.ZOOM_MAX, pct - 100.0)))
-            self._zoom_pct.set("%d %%" % round(pct))
-
-    def _zoom_100(self):
-        """Deja el control en el 100 %: la hoja a su tamaño real de impresión.
-
-        Antes el visor abría «encajado» para que la hoja completa entrara en el
-        panel. Se cambió a 100 % fijo, que es el tamaño real de la carta, y el
-        botón de encajar sigue disponible para cuando haga falta verlo entero.
-        """
-        self._zoom_ir(0)
-        self._zoom_pct.set("100 %")
 
     #: ancho en caracteres de los dos botones de Muestra. Se fijan los dos al
     #: mismo para que midan igual, ya que el texto más corto no los iguala.
@@ -1400,7 +1352,8 @@ class App(tk.Tk):
             return
         try:
             from reporte.pdf import preview_pdf
-            pdf = preview_pdf(self._datos_actuales, self._res_actuales, self._ident())
+            pdf = preview_pdf(self._datos_actuales, self._res_actuales,
+                         self._ident(), firmar=self.firmar.get())
             doc = fitz.open(pdf)
             z = self._zoom_preview()
             imgs = []
@@ -1480,7 +1433,7 @@ class App(tk.Tk):
             # sin ellos el reporte salía siempre como "Suelos" y sin
             # graduación, aunque en pantalla se hubiera elegido control de
             # calidad.
-            report_pdf(datos, res, ident, path)
+            report_pdf(datos, res, ident, path, firmar=self.firmar.get())
         except Exception as e:
             messagebox.showerror("Guardar PDF", "Error al generar el PDF:\n%s" % e)
             return

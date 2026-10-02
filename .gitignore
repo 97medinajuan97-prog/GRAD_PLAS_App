@@ -19,3 +19,16 @@ dist/
 # El icono del ejecutable se compila a .ico desde icon.png con
 # tools_generar_icono.py. Se versiona el origen; el .ico es un derivado.
 icon.ico
+
+# Firmas escaneadas: NO se versionan.
+#
+# Son la rúbrica de dos personas y el repositorio es público: subirlas
+# publicaría sus firmas sin que nadie lo haya pedido. El reporte funciona igual
+# sin ellas, porque `reporte.constantes.FIRMAS` apunta a la carpeta `firmas/`
+# y si no está, el bloque sale con los nombres y el espacio en blanco (que es
+# justo lo que se quiere para una copia que se firma a mano).
+#
+# Si en algún momento hay que compartirlas, se quitan estas dos líneas.
+firma_ing.png
+firma_laboratorista.jfif
+firmas/

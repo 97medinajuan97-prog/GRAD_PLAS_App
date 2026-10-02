@@ -1943,66 +1943,106 @@ def _dibujar_pie(c, box, fn, fnb):
         bas -= 10.0
 
 
-def _dibujar_firmas(c, box, fn, fnb):
-    """Bloque de firmas de responsabilidad justo encima del pie.
+def _firma_preparada(nombre):
+    """Ruta de una firma escaneada, o `None` si no está.
 
-    Dos columnas separadas por una linea vertical delgada:
-      * izquierda: la firma manuscrita real se escribe a mano en el
-        espacio en blanco; bajo una linea delgada se imprimen el cargo
-        y el nombre del responsable.
-      * derecha: igual estructura con el espacio en blanco.
-    Config: reporte.constantes.FIRMAS = (lado, imagen, nombre, cargo).
+    La búsqueda va por `rutas.recurso`, que dentro del ejecutable apunta a la
+    carpeta donde PyInstaller metió los archivos. Buscar la imagen con una
+    ruta relativa al módulo, como se hacía antes con el logo, la perdería al
+    empaquetar: el reporte saldría sin firmas y sin avisar.
+    """
+    if not nombre:
+        return None
+    from rutas import recurso
+    ruta = recurso(*nombre.replace("\\", "/").split("/"))
+    return ruta if os.path.isfile(ruta) else None
+
+
+def _dibujar_firmas(c, box, fn, fnb, firmar=True):
+    """Bloque de firmas de responsabilidad, justo encima del pie.
+
+    Dos columnas separadas por una línea vertical delgada. En cada una: el
+    espacio de la firma encima de una línea fina, y debajo el cargo y el
+    nombre del responsable.
+
+    Con `firmar` se dibujan las firmas escaneadas encima de la línea. Sin ellas
+    el espacio queda en blanco, que es justo lo que se necesita para imprimir
+    una copia que luego se firma a mano: el cargo y el nombre siempre están.
+
+    Config: reporte.constantes.FIRMAS, con las claves lado, imagen, nombre y
+    cargo.
     """
     from reportlab.lib import colors as _c
+    from reportlab.lib.utils import ImageReader
     try:
         from reporte.constantes import FIRMAS
     except Exception:
         FIRMAS = ()
     x, y, w, h = box
     midx = x + w / 2.0
+    NEGRO = _c.HexColor("#000000")
+    GRIS_LINEA = _c.HexColor("#2a3542")
+    GRIS_SEP = _c.HexColor("#b9bfc7")
 
-    # linea vertical delgada que separa las dos columnas
+    # línea vertical delgada que separa las dos columnas
     c.saveState()
-    c.setStrokeColor(_c.HexColor("#b9bfc7"))
+    c.setStrokeColor(GRIS_SEP)
     c.setLineWidth(0.4)
     c.line(midx, y, midx, y + h)
 
     half = w / 2.0
+    #: alto reservado para la firma, por encima de la línea. La línea se mide
+    #: desde ARRIBA de la caja: la caja está anclada al borde inferior de la
+    #: hoja, y lo que se quiere es que la firma quede entre la línea y el
+    #: borde superior de su bloque, sin pasarse.
+    alto_firma = 22.0
     for it in FIRMAS:
-        if len(it) == 5:
-            lado, imagen, nombre, cargo, _u = it
-        elif len(it) == 4:
-            lado, imagen, nombre, cargo = it
-        else:
-            nombre, cargo, imagen = it
-            lado = "izq"
-        cx = x if (lado or "").lower().startswith("izq") else midx
-        cw = half
-        cxx = cx + cw / 2.0
-        # espacio en BLANCO reservado para la firma manuscrita (sin nombre)
-        # linea delgada bajo el espacio de la firma
-        lw = cw * 0.46
-        # zona en BLANCO sobre la linea para la firma manuscrita (22 pt)
-        liny = y + h - 22.0
-        base_cargo = liny - 9.0
+        lado = (it.get("lado") or "izq").lower()
+        cx = x if lado.startswith("izq") else midx
+        cxx = cx + half / 2.0
+        lw = half * 0.46
+
+        # La línea se dibuja DESPUÉS de la firma: si fuera antes, una firma con
+        # fondo transparente dejaría la línea asomando entre los trazos, y el
+        # papel de un escaneo casi nunca es del todo transparente.
+        y_linea = y + h - alto_firma
+        base_cargo = y_linea - 8.0
         base_nombre = base_cargo - 9.5
-        c.setStrokeColor(_c.HexColor("#2a3542"))
+
+        ruta = _firma_preparada(it.get("imagen")) if firmar else None
+        if ruta:
+            # Encajar la firma dentro de la caja sin deformarla: se escala por
+            # el lado que aprieta y se centra en la otra dirección. Una firma
+            # muy ancha se ve baja y una muy alta, angosta; lo que no se hace es
+            # estirarla, porque una rúbrica estirada parece falsificada.
+            try:
+                iw, ih = ImageReader(ruta).getSize()
+            except Exception:
+                iw = ih = 0
+            if iw > 0 and ih > 0:
+                # Alto disponible: el bloque por encima de la línea, con aire.
+                disp_h = h - alto_firma - 2.0
+                esc = min(lw / float(iw), disp_h / float(ih))
+                # reportlab toma la `y` de `drawImage` como la esquina
+                # INFERIOR, y la imagen crece hacia arriba. Pasarle la línea
+                # tal cual deja la firma apoyada en ella, que es lo que se
+                # busca: la firma rests sobre la línea, no colgando debajo.
+                c.drawImage(ImageReader(ruta), cxx - iw * esc / 2.0,
+                            y_linea, width=iw * esc, height=ih * esc,
+                            mask="auto")
+
+        c.setStrokeColor(GRIS_LINEA)
         c.setLineWidth(0.6)
-        c.line(cxx - lw / 2.0, liny, cxx + lw / 2.0, liny)
-        if lado == "izq":
-            c.setFont(fn, 8.3)
-            c.setFillColor(_c.HexColor("#000000"))
-            c.drawCentredString(cxx, base_cargo, cargo)
-            c.setFont(fn, 7.6)
-            c.setFillColor(_c.HexColor("#000000"))
-            c.drawCentredString(cxx, base_nombre, nombre)
-        else:
-            c.setFont(fn, 8.0)
-            c.setFillColor(_c.HexColor("#000000"))
-            c.drawCentredString(cxx, base_cargo, cargo)
+        c.line(cxx - lw / 2.0, y_linea, cxx + lw / 2.0, y_linea)
+
+        c.setFillColor(NEGRO)
+        c.setFont(fnb, 8.0)
+        c.drawCentredString(cxx, base_cargo, it.get("cargo") or "")
+        c.setFont(fn, 7.6)
+        c.drawCentredString(cxx, base_nombre, it.get("nombre") or "")
     c.restoreState()
 
-def report_pdf(datos, res, ident, path):
+def report_pdf(datos, res, ident, path, firmar=False):
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors as rlcolors
     from reportlab.pdfgen import canvas as _canvas
@@ -2039,7 +2079,7 @@ def report_pdf(datos, res, ident, path):
             _dib_grain_size_chart(c, (x, y, w, h), fn, fnb, res)
             continue
         if nombre == "firmas-block":
-            _dibujar_firmas(c, (x, y, w, h), fn, fnb)
+            _dibujar_firmas(c, (x, y, w, h), fn, fnb, firmar=firmar)
             continue
         if nombre == "PIE-block" or nombre == "footer":
             # pie de página fijo: línea gruesa + datos del laboratorio
@@ -2070,9 +2110,9 @@ def report_pdf(datos, res, ident, path):
     c.save()
 
 
-def preview_pdf(datos, res, ident):
+def preview_pdf(datos, res, ident, firmar=False):
     """Genera el PDF de vista previa en el directorio temporal."""
     import tempfile
     pdf = os.path.join(tempfile.gettempdir(), _temp_prefix() + "preview.pdf")
-    report_pdf(datos, res, ident, pdf)
+    report_pdf(datos, res, ident, pdf, firmar=firmar)
     return pdf
