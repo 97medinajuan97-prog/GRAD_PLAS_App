@@ -38,18 +38,22 @@ FIRMAS = (
 #:
 #: Cada uno lleva su prefijo, que es el codigo corto con el que se rotula el
 #: numero de exploracion: una manual es `P-2`, una mecanica `PM-2` y un apique
-#: `A-2`. El rotulo es la palabra que encabeza la fila del reporte: con la misma
-#: informacion se puede llamar "PERFORACION" o "APIQUE", asi que la fila no
-#: puede decir solo "PERFORACION" cuando lo que se hizo fue un apique.
+#: `A-2`.
+#:
+#: El rotulo es la palabra que encabeza la fila del reporte. Manual y mecanica
+#: comparten "PERFORACION": el codigo ya dice cual de las dos es, asi que
+#: escribirlo dos veces en la misma linea solo ocupa espacio. El apique SI
+#: conserva el suyo, porque un apique no es una perforacion: es otra exploracion
+#: y en un informe de campo decir "PERFORACION" de un apique seria untrue.
 #:
 #: El orden es el que ve el usuario en el desplegable.
 TIPOS_EXPLORACION = (
     {"nombre": "Perforaci\u00f3n manual",
      "prefijo": "P",
-     "rotulo": "PERFORACI\u00d3N MANUAL"},
+     "rotulo": "PERFORACI\u00d3N"},
     {"nombre": "Perforaci\u00f3n mec\u00e1nica",
      "prefijo": "PM",
-     "rotulo": "PERFORACI\u00d3N MEC\u00c1NICA"},
+     "rotulo": "PERFORACI\u00d3N"},
     {"nombre": "Apique",
      "prefijo": "A",
      "rotulo": "APIQUE"},

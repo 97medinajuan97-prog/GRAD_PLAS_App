@@ -274,6 +274,12 @@ class Granulometria(Seccion):
         self.v_w2l = tk.StringVar()
         self.v_fondo = tk.StringVar()
         self.v_fondo.set("auto")
+        #: True cuando el usuario ha escrito un W1 propio. Mientras no lo haga,
+        #: la casilla se llena sola con el peso del suelo de la humedad natural.
+        #: En cuanto escribe, su valor manda sobre el de la humedad: corregir la
+        #: humedad despues ya no cambia esta casilla, porque el total de la
+        #: granulometria es suyo. Borrarlo devuelve el control a la humedad.
+        self._w1_propio = False
         #: Serie de tamices vigente. Arranca con la de suelos y la cambia la
         #: app según el tipo de muestra y su alcance (`set_serie`).
         self._serie = list(SIEVES_SUELOS)
@@ -313,8 +319,20 @@ class Granulometria(Seccion):
                  font=(FAM_UI, 10), fg=TXT, bg=CARD).pack(side="left")
         tk.Label(fila, text=" (g)",
                  font=(FAM_UI, 10), fg=MUT, bg=CARD).pack(side="left")
-        frm, num = self.caja(fila, self.v_w1, editable=False)
+        frm, num = self.caja(fila, self.v_w1, editable=True)
         frm.pack(side="left", padx=(10, 0))
+        num.bind("<KeyRelease>", self._al_tocar_w1, add="+")
+        num.bind("<FocusOut>", self._al_tocar_w1, add="+")
+        #: Marca de "este valor lo escribio el usuario". Sin ella, un W1 que no
+        #: cuadra con los pesos parece un error de la aplicacion, cuando es un
+        #: valor introducido a proposito.
+        self._lbl_w1 = tk.Label(fila, text="", font=(FAM_UI, 9), fg=ACC,
+                                bg=CARD)
+        self._lbl_w1.pack(side="left", padx=(5, 0))
+        ToolTip(num, "Peso del suelo que se tamiza.\n\nViene con el peso del "
+                     "suelo de la humedad natural. Se puede cambiar si el "
+                     "material tamizado no es esa misma porción.\n\nBorralo "
+                     "para volver al valor de la humedad.")
         tk.Label(fila, text="W2",
                  font=(FAM_UI, 10), fg=TXT, bg=CARD).pack(side="left",
                                                              padx=(22, 0))
@@ -524,12 +542,21 @@ class Granulometria(Seccion):
         valor = {nombre: fnum(self.peso_vars[i].get())
                  for i, (nombre, _d) in enumerate(SIEVES_SUELOS[:-1])}
         pesos = [valor.get(nombre) for nombre, _d in self._serie[:-1]]
-        return {"total": None, "pesos": pesos,
+        # El W1 solo se manda si el usuario puso uno propio. Si la casilla esta
+        # con el valor automatico de la humedad, se manda vacio para que el
+        # motor use el de la humedad y no dos veces el mismo numero.
+        w1 = fnum(self.v_w1.get()) if self._w1_propio else None
+        return {"total": None, "pesos": pesos, "w1": w1,
                 "serie": [nombre for nombre, _d in self._serie[:-1]]}
 
     def mostrar(self, res):
         gt = res.get("g_total")
+        # La casilla refleja siempre el total que se esta usando, para que el
+        # numero de la tabla y el W1 de arriba no se contradigan. Se escribe en
+        # la variable y no en el control, y la variable NO esta conectada al
+        # refresco: si lo estuviera, esto mismo se volveria a refrescar.
         self.v_w1.set("—" if gt is None else "%.2f" % gt)
+        self._marcar_w1()
         f = res.get("fondo")
         w2 = (gt - f) if (gt is not None and f is not None) else None
         self.v_w2l.set("—" if w2 is None else "%.2f" % w2)
@@ -575,6 +602,38 @@ class Granulometria(Seccion):
         pesos = list(g.get("pesos") or [])
         serie_origen = list(g.get("serie") or [n for n, _ in self._serie])
         self._set_pesos_por_nombre(pesos, serie_origen)
+        # Un archivo viejo no trae W1: se deja el control a la humedad, que es
+        # lo que hacia la aplicacion antes de que la casilla fuera editable.
+        w1 = g.get("w1")
+        if w1 is not None:
+            self._w1_propio = True
+            self.v_w1.set("%.2f" % float(w1))
+        else:
+            self._w1_propio = False
+            self.v_w1.set("")
+        self._marcar_w1()
+
+    def w1_propio(self):
+        """¿El usuario escribió un W1 propio en vez de usar el de la humedad?"""
+        return self._w1_propio
+
+    def _al_tocar_w1(self, *_):
+        """El usuario escribio en la casilla W1.
+
+        Se escucha en el CONTROL y no en la variable, y a proposito. W1 es una
+        salida que se rellena sola con el total, asi que si la variable
+        estuviera conectada al refresco, cada vez que `mostrar` la rellenara
+        se volveria a refrescar, y de ahi otra vez, sin fin. Ademas no se
+        podria distinguir un relleno de una edicion. En el control solo llegan
+        pulsaciones de teclado: lo escribe la persona o no lo escribe.
+        """
+        self._w1_propio = bool(self.v_w1.get().strip())
+        self._marcar_w1()
+        self.pedir_refresco()
+
+    def _marcar_w1(self):
+        """Muestra o quita la marca de valor propio."""
+        self._lbl_w1.config(text="propio" if self._w1_propio else "")
 
     def peso_var_de(self, nombre):
         """Variable de un tamiz por su nombre.
@@ -639,7 +698,11 @@ class Granulometria(Seccion):
 
     def limpiar(self):
         super().limpiar()
-        self.v_w1.set("—")
+        # Al limpiar se vuelve al valor de la humedad: un W1 propio era de este
+        # ensayo y no tiene sentido arrastrarlo al siguiente.
+        self._w1_propio = False
+        self.v_w1.set("")
+        self._marcar_w1()
         self.v_w2l.set("—")
         self.v_fondo.set("auto")
         self._fondo_num.config(fg=MUT)

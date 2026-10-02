@@ -99,8 +99,22 @@ def calcular(data):
     serie = serie_para(grano.get("tipo"), grano.get("alcance"))
     res["serie"] = [t for t, _ in serie]
     w_suelo = hu["w_suelo"]
-    g_total = w_suelo if (w_suelo is not None and w_suelo > 0) else None
+    # El total de la granulometria es el W1 de su propia tabla, que viene
+    # puesto con el peso del suelo de la humedad natural pero se puede cambiar:
+    # hay ensayos donde el material que se tamiza no es la misma porcion de la
+    # que se leyo la humedad, y forzar el total de la humedad dejaria la curva
+    # con porcentajes que no cuadran con los pesos de la tabla.
+    #
+    # Aqui no se decide cual de los dos manda: se devuelven los dos y cada
+    # pantalla usa el que le corresponde. La granulometria escribe su W1 y el
+    # motor solo lo usa si hay algo escrito.
+    w_gramo = grano.get("w1")
+    base = w_gramo if (w_gramo is not None and w_gramo > 0) else w_suelo
+    g_total = base if (base is not None and base > 0) else None
     res["g_total"] = g_total
+    #: El peso del suelo que sale de la humedad natural, para que la casilla
+    #: W1 de la granulometria pueda mostrarlo como valor por defecto.
+    res["w_suelo_humedad"] = w_suelo
     g = calcular_granulometria({"total": g_total, "pesos": grano["pesos"]},
                                serie)
     res["fondo"] = g["fondo"]

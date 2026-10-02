@@ -780,6 +780,9 @@ class Seccion(ttk.LabelFrame):
         super().__init__(master, text=self.titulo, style="Card.TLabelframe",
                          padding=9, labelanchor="n")
         self._vars = []
+        #: Avisador de cambios, lo pone `bind_cambio`. Vive aquí para que una
+        #: sección pueda pedir un refresco por algo que no esté en `_vars`.
+        self._cb_cambio = None
 
     # -- hook para entradas: registrar variables y rotulos de salida ----
     def registrar(self, *var):
@@ -788,8 +791,20 @@ class Seccion(ttk.LabelFrame):
 
     # -- interfaz comun ----
     def bind_cambio(self, cb):
+        # Se guarda el avisador para que la sección pueda pedir un refresco
+        # cuando cambie algo que no está en `_vars`. Hace falta en la
+        # granulometría con W1: es una salida que la propia tabla se rellena,
+        # así que no puede estar en `_vars` (si estuviera, cada relleno volvería
+        # a disparar el refresco, sin fin), pero el usuario también escribe en
+        # ella y eso sí tiene que refrescar.
+        self._cb_cambio = cb
         for v in self._vars:
             v.trace_add("write", cb)
+
+    def pedir_refresco(self):
+        """Pide a la app que recalcule, si hay a quién pedirlo."""
+        if self._cb_cambio:
+            self._cb_cambio()
 
     def limpiar(self):
         for v in self._vars:
